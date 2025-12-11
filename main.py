@@ -335,7 +335,7 @@ async def on_message(message: discord.Message):
             return
 
 if __name__ == "__main__":
-    TOKEN = os.getenv("MTQ0ODY4MzkzNjgxNjU2NjQ0Nw.G3GzJH.cYEbBX4GFUYj1Go6qSESrKqM8ql5BuiY76oqhk")
+    TOKEN = os.getenv("MTQ0ODY4MzkzNjgxNjU2NjQ0Nw.GE3inB.mmVBsVO3vPFBBx2WqrfOlwagmHY-6JSHScznoI")
     if not TOKEN:
         raise SystemExit("Set DISCORD_BOT_TOKEN env var in Railway (Variables tab).")
     client.run(TOKEN)
