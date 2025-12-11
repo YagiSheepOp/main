@@ -1,9 +1,6 @@
-# bot.py
+# main.py (updated)
 """
-Discord bot with configurable distribution modes per command:
-  - "consume": remove account when delivered (used once)
-  - "random_repeat": pick random but do NOT remove (accounts can be reused)
-  - "round_robin": serve accounts in order, wrap around (do NOT remove)
+Discord bot with custom embed delivery using your emojis.
 """
 
 import os
@@ -18,7 +15,6 @@ from datetime import datetime, timedelta
 logging.basicConfig(level=logging.INFO)
 
 # ---------------- CONFIG ----------------
-# TRIGGERS: command -> filename (str) OR list of account strings
 TRIGGERS = {
     "gcart gen mcfa": [
         "christiebailey93@hotmail.co.uk:Chr15t13123",
@@ -29,49 +25,45 @@ TRIGGERS = {
     ],
 }
 
-# DELIVERY_MODE: "dm" or "channel"
 DELIVERY_MODE = {
     "gcart gen mcfa": "dm",
     "gcart gen stock": "channel",
 }
 
-# DISTRIBUTION_MODE per command:
-# - "consume"      -> remove account after delivering (one-time use)
-# - "random_repeat"-> random pick but DO NOT remove (accounts reused)
-# - "round_robin"  -> cycle through accounts in order (reused, orderly)
 DISTRIBUTION_MODE = {
-    "gcart gen mcfa": "random_repeat",   # give same pool repeatedly (random)
-    "gcart gen stock": "round_robin",    # cycle accounts in order for each request
+    "gcart gen mcfa": "random_repeat",
+    "gcart gen stock": "round_robin",
 }
 
-# STOCK_MESSAGES only relevant for stock command (you can change wording)
 STOCK_MESSAGES = {
     "gcart gen stock": "{command} — {remaining} stock remaining"
 }
 
-# Required status substring users must have in custom status
 REQUIRED_STATUS = ".gg/CNFyBV5VnG Best Mcfa Gen"
 
-DM_TITLE = "🎁 Your free account from GCart"
-DM_FOOTER = "If the account doesn't work, try another or contact admin."
+# Custom emojis (as you provided)
+EMOJI_BOOK      = "<a:400125purplebook:1447592335012532334>"
+EMOJI_ARROW     = "<a:arrow_blueright:1434864844405735424>"
+EMOJI_MINECRAFT = "<a:MinecraftAnimated:1390248064207552573>"
 
-COOLDOWN_SECONDS = 60       # cooldown per user per command
+DM_TITLE = "GCART DILEVERY UNDER 1 SECOND"   # user requested title exactly
+DM_FOOTER = "If it doesn't work, tell admin."
+
+COOLDOWN_SECONDS = 60
 IGNORE_CASE = True
 NOTIFY_IN_CHANNEL_ON_FAIL = True
 # -----------------------------------------
 
-# Intents - ensure these are toggled in Developer Portal
 intents = discord.Intents.default()
 intents.message_content = True
-intents.presences = True   # required to read custom status
+intents.presences = True
 intents.members = True
 
 client = discord.Client(intents=intents)
 
-# runtime state
-cooldowns = {}            # (user_id, cmd) -> datetime
-file_locks = {}           # key -> asyncio.Lock
-round_robin_indices = {}  # key (id(source) or path) -> next index (int)
+cooldowns = {}
+file_locks = {}
+round_robin_indices = {}
 
 def normalize(s: str) -> str:
     return s.strip().lower() if IGNORE_CASE and isinstance(s, str) else (s.strip() if isinstance(s, str) else s)
@@ -84,7 +76,6 @@ def get_lock(key: str) -> asyncio.Lock:
     return lock
 
 async def load_file_lines(path: str):
-    """Read non-empty lines from file, return list of strings (or [] if missing/empty)."""
     if not os.path.exists(path):
         return []
     with open(path, "r", encoding="utf-8") as f:
@@ -97,20 +88,12 @@ async def write_file_lines_atomic(path: str, lines: list):
     os.replace(tmp, path)
 
 async def pick_account(source, distribution_mode: str, remove_on_deliver: bool):
-    """
-    source: either a list or a filename (string).
-    distribution_mode: "consume", "random_repeat", "round_robin"
-    remove_on_deliver: if True and distribution_mode == "consume", remove the delivered item
-    Returns chosen account string or None.
-    """
-    # In-memory list case
     if isinstance(source, list):
         key = f"__list_{id(source)}"
         lock = get_lock(key)
         async with lock:
             if not source:
                 return None
-
             if distribution_mode == "consume":
                 choice = random.choice(source)
                 if remove_on_deliver:
@@ -119,22 +102,16 @@ async def pick_account(source, distribution_mode: str, remove_on_deliver: bool):
                     except ValueError:
                         pass
                 return choice
-
             elif distribution_mode == "random_repeat":
                 return random.choice(source)
-
             elif distribution_mode == "round_robin":
                 idx = round_robin_indices.get(key, 0)
                 choice = source[idx % len(source)]
-                # advance index
                 round_robin_indices[key] = (idx + 1) % len(source)
                 return choice
-
             else:
-                # unknown mode -> fallback to random_repeat
                 return random.choice(source)
 
-    # File-backed case
     if isinstance(source, str):
         filename = source
         path = os.path.join(os.path.dirname(__file__), filename)
@@ -143,11 +120,9 @@ async def pick_account(source, distribution_mode: str, remove_on_deliver: bool):
             lines = await load_file_lines(path)
             if not lines:
                 return None
-
             if distribution_mode == "consume":
                 choice = random.choice(lines)
                 if remove_on_deliver:
-                    # remove first matching line
                     removed = False
                     new_lines = []
                     for ln in lines:
@@ -157,24 +132,19 @@ async def pick_account(source, distribution_mode: str, remove_on_deliver: bool):
                         new_lines.append(ln)
                     await write_file_lines_atomic(path, new_lines)
                 return choice
-
             elif distribution_mode == "random_repeat":
                 return random.choice(lines)
-
             elif distribution_mode == "round_robin":
                 key = path
                 idx = round_robin_indices.get(key, 0)
                 choice = lines[idx % len(lines)]
                 round_robin_indices[key] = (idx + 1) % len(lines)
                 return choice
-
             else:
                 return random.choice(lines)
-
     return None
 
 def get_remaining(source) -> int:
-    """Return remaining count (lines or list length). For consume mode this reflects current pool."""
     if isinstance(source, list):
         return len(source)
     if isinstance(source, str):
@@ -186,7 +156,6 @@ def get_remaining(source) -> int:
     return 0
 
 def user_has_required_status(member: discord.Member) -> bool:
-    """Check member.activities for a custom status containing REQUIRED_STATUS."""
     if not member:
         return False
     acts = getattr(member, "activities", None)
@@ -219,6 +188,70 @@ def on_cooldown(user_id: int, command: str) -> (bool, float):
 def set_cooldown(user_id: int, command: str, seconds: int):
     key = (user_id, normalize(command))
     cooldowns[key] = datetime.utcnow() + timedelta(seconds=seconds)
+
+# --------- NEW: custom embed builder & sender ----------
+def build_custom_embed(user: discord.abc.Snowflake, command: str, account: str) -> Embed:
+    """
+    Build embed using the three custom emojis and the layout you requested.
+    Email -- >> <email>
+    Password -->> <password>
+    Footer instructs to tell admin if it doesn't work.
+    No timestamp.
+    """
+    # parse account into email/password
+    email = account
+    password = ""
+    if isinstance(account, str) and ":" in account:
+        # split only on first colon to allow colons in password
+        parts = account.split(":", 1)
+        email = parts[0].strip()
+        password = parts[1].strip()
+    else:
+        # keep entire account in email field if no separator
+        email = account.strip()
+
+    title = f"{EMOJI_BOOK}  {DM_TITLE}"
+    embed = Embed(title=title, description=f"{EMOJI_ARROW}  **Your requested account is below**", color=0x6A3BE2)
+    # Email and password fields using exactly the text layout requested
+    embed.add_field(name="Email -- >>", value=f"`{email}`", inline=False)
+    if password:
+        embed.add_field(name="Password -->>", value=f"`{password}`", inline=False)
+    else:
+        embed.add_field(name="Password -->>", value="`(none)`", inline=False)
+
+    # short status field with the minecraft emoji
+    embed.add_field(name=f"{EMOJI_MINECRAFT} Status", value="Delivered — if it doesn't work tell admin.", inline=False)
+
+    # footer (no timestamp)
+    display = getattr(user, "display_name", getattr(user, "name", str(user)))
+    embed.set_footer(text=f"Requested by {display} • GCart")
+    return embed
+
+async def send_custom_delivery(target, user, command: str, account: str):
+    """
+    target: discord.User/Member (for DM) or a TextChannel (for public).
+    user: the requester Member/User for footer and mention.
+    """
+    embed = build_custom_embed(user, command, account)
+    try:
+        if isinstance(target, (discord.User, discord.Member)):
+            await target.send(embed=embed)
+        else:
+            await target.send(content=f"{user.mention}", embed=embed)
+    except Forbidden:
+        # fallback notifications
+        if isinstance(target, (discord.User, discord.Member)):
+            # couldn't DM the user
+            # We won't re-add the account here; just notify
+            print("Couldn't DM user; DMs may be closed.")
+        else:
+            try:
+                await target.send("I don't have permission to send embeds here. Please check my permissions.")
+            except Exception:
+                pass
+    except Exception as e:
+        print("Error sending custom delivery:", e)
+# ------------------------------------------------------
 
 @client.event
 async def on_ready():
@@ -253,44 +286,26 @@ async def on_message(message: discord.Message):
                 await message.channel.send(f"{user.mention} Please wait {int(secs)}s before using this command again.")
                 return
 
-            # decide distribution mode for this command
             dist_mode = DISTRIBUTION_MODE.get(cmd_text, "random_repeat")
-            # remove_on_deliver should only be True if using "consume"
             remove_flag = (dist_mode == "consume")
 
-            # pick account
             account = await pick_account(source, distribution_mode=dist_mode, remove_on_deliver=remove_flag)
             if not account:
                 await message.channel.send(f"{user.mention} Sorry — no accounts available for `{cmd_text}`. Ask an admin.")
                 return
 
-            # build embed
-            embed = Embed(title=DM_TITLE, description=f"**Command:** {cmd_text}", color=0x2ecc71)
-            embed.add_field(name="Account", value=f"```{account}```", inline=False)
-            embed.set_footer(text=DM_FOOTER)
-            try:
-                embed.timestamp = datetime.utcnow()
-            except Exception:
-                pass
-
             mode = DELIVERY_MODE.get(cmd_text, "dm")
 
             try:
+                # use the custom embed sender for both DM and channel
                 if mode == "dm":
-                    await user.send(embed=embed)
+                    await send_custom_delivery(user, user, cmd_text, account)
                     try:
                         await message.add_reaction("✅")
                     except Exception:
                         pass
                 else:
-                    public_embed = Embed(title=DM_TITLE, description=f"**Command:** {cmd_text}", color=0x2ecc71)
-                    public_embed.add_field(name="Account", value=f"```{account}```", inline=False)
-                    public_embed.set_footer(text=DM_FOOTER)
-                    try:
-                        public_embed.timestamp = datetime.utcnow()
-                    except Exception:
-                        pass
-                    await message.channel.send(content=f"{user.mention}", embed=public_embed)
+                    await send_custom_delivery(message.channel, user, cmd_text, account)
                     try:
                         await message.add_reaction("✅")
                     except Exception:
@@ -298,7 +313,7 @@ async def on_message(message: discord.Message):
 
                 set_cooldown(user.id, cmd_text, COOLDOWN_SECONDS)
 
-                # Only send stock message for commands listed in STOCK_MESSAGES and only when it's public (you can change)
+                # If this is the stock command and we want to show remaining, send stock message (only for channel mode)
                 if cmd_text in STOCK_MESSAGES:
                     remaining = get_remaining(source)
                     template = STOCK_MESSAGES.get(cmd_text)
@@ -320,7 +335,7 @@ async def on_message(message: discord.Message):
             return
 
 if __name__ == "__main__":
-    TOKEN = os.getenv("DISCORD_BOT_TOKEN", "MTQ0ODY4MzkzNjgxNjU2NjQ0Nw.G0YnD3.JCaK6cPQSwat6pF1vQXoYFyTM7hhH8VnIKJcfk")
-    if not TOKEN or TOKEN == "PASTE_YOUR_TOKEN_HERE":
-        raise SystemExit("Set DISCORD_BOT_TOKEN env var or replace the placeholder in the script.")
+    TOKEN = os.getenv("MTQ0ODY4MzkzNjgxNjU2NjQ0Nw.G3GzJH.cYEbBX4GFUYj1Go6qSESrKqM8ql5BuiY76oqhk")
+    if not TOKEN:
+        raise SystemExit("Set DISCORD_BOT_TOKEN env var in Railway (Variables tab).")
     client.run(TOKEN)
