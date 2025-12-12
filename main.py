@@ -1,6 +1,11 @@
-# main.py - GCart Ultra Premium (Status + Server Tag required)
-# Edit the CONFIG block below (SUPPORT_URL, REQUIRED_STATUS_PHRASE, REQUIRED_SERVER_TAG, ADMIN_ROLE_NAME)
-# Deploy on Railway: add TOKEN env var, Procfile: worker: python main.py
+# main.py - GCart (Status-only verification)
+# - Requires users to have a custom status containing either:
+#     * the configured REQUIRED_STATUS_PHRASE (substring match)
+#     * any ".gg/" shortlink (e.g. .gg/CNFyBV5VnG)
+#     * the word "gcart"
+# - Server tag checks removed
+# - Admins (server administrators or role name ADMIN_ROLE_NAME) bypass cooldown & checks
+# - Put your token in env var TOKEN (Railway). Do NOT hardcode token.
 
 import os
 import json
@@ -11,21 +16,18 @@ from discord.ext import commands
 from discord import ui, ButtonStyle
 
 # ======================
-# CONFIG - EDIT THESE (only these 4 values are usually required)
+# CONFIG - edit these
 # ======================
 PREFIX = "!"
 DATA_FILE = "data.json"
 
-# REQUIRED custom status phrase (case-insensitive)
+# REQUIRED custom status phrase (case-insensitive substring)
 REQUIRED_STATUS_PHRASE = ".gg/CNFyBV5VnG GCart Best Generator ✅"
 
-# REQUIRED server tag text (exact text users adopt). Change to your exact server tag text.
-REQUIRED_SERVER_TAG = "GCrt"
-
-# Admin role name that bypasses checks and cooldown
+# Admin role name that bypasses checks and cooldown (case-sensitive)
 ADMIN_ROLE_NAME = "GCartAdmin"
 
-# Support button link (must be a valid URL starting with http/https or discord invite)
+# Support invite / URL (must start with http(s) or a valid discord invite url)
 SUPPORT_URL = "https://discord.gg/CNFyBV5VnG"
 
 # Colors per generator (hex)
@@ -44,7 +46,7 @@ DEFAULT_COLOR = 0xF1C40F
 COOLDOWN_SECONDS = 200
 last_used = {}  # in-memory: user_id -> timestamp
 
-# Optional debug flag: set env DEBUG_LOG=1 to print token presence and lengths (safe)
+# Optional debug (set DEBUG_LOG=1 in env to print token presence/len safely)
 DEBUG_LOG = os.getenv("DEBUG_LOG", "0") == "1"
 
 # ======================
@@ -64,7 +66,6 @@ def load_data():
     if not os.path.exists(DATA_FILE):
         data = {
             "required_status_phrase": REQUIRED_STATUS_PHRASE,
-            "required_server_tag": REQUIRED_SERVER_TAG,
             "templates": {"stock_embed_footer": "Powered by GCart Bot"},
             "generators": {
                 "mcfa": {"accounts": [{"email": "jasdja@gmail.com", "password": "sajsj"}]},
@@ -87,9 +88,7 @@ def save_data(d):
         json.dump(d, f, indent=2)
 
 data = load_data()
-# sync config fields with file (so admin commands can update)
 data.setdefault("required_status_phrase", REQUIRED_STATUS_PHRASE)
-data.setdefault("required_server_tag", REQUIRED_SERVER_TAG)
 save_data(data)
 
 # ======================
@@ -101,6 +100,7 @@ def is_admin_ctx(ctx):
             return True
     except Exception:
         pass
+    # role name bypass
     return ADMIN_ROLE_NAME in [r.name for r in ctx.author.roles]
 
 def is_admin_member(member: discord.Member):
@@ -112,82 +112,54 @@ def is_admin_member(member: discord.Member):
     return ADMIN_ROLE_NAME in [r.name for r in getattr(member, "roles", [])]
 
 def user_has_required_custom_status(member: discord.Member, phrase: str) -> bool:
-    """Check for custom status text (robust across versions)."""
-    phrase = phrase.lower()
-    activities = getattr(member, "activities", None)
-    if not activities:
-        return False
+    """
+    Tolerant status check:
+      - returns True if status contains the configured phrase (substring, case-insensitive)
+      - OR if it contains ".gg/" (any invite shortlink)
+      - OR if it contains "gcart"
+    Also falls back to checking display_name and nick if presence isn't available.
+    """
+    try:
+        phrase = (phrase or "").lower().strip()
+    except Exception:
+        phrase = ""
+
+    activities = getattr(member, "activities", None) or []
+    collected = []
+
     for act in activities:
         try:
+            # check common fields
             state = getattr(act, "state", None)
-            if state and phrase in str(state).lower():
-                return True
             name = getattr(act, "name", None)
-            if name and phrase in str(name).lower():
-                return True
-            if phrase in str(act).lower():
-                return True
+            text_options = [state, name, str(act)]
+            for txt in text_options:
+                if not txt:
+                    continue
+                s = str(txt).lower()
+                collected.append(s)
+                if phrase and phrase in s:
+                    return True
+                if ".gg/" in s:
+                    return True
+                if "gcart" in s:
+                    return True
         except Exception:
             continue
-    return False
 
-def user_has_server_tag(member: discord.Member, tag_text: str) -> bool:
-    """
-    Try to detect Server Tag adoption.
-    Strategy:
-     1) Try member.guild_profile.* fields (if available)
-     2) Try member.public_flags (not reliable)
-     3) Fallback: check nickname/display_name contains tag substring
-    """
-    tag_text = tag_text.lower()
-    # 1) guild_profile (newer API)
+    # fallback: check nick / display_name
     try:
-        gp = getattr(member, "guild_profile", None)
-        if gp:
-            for attr in ("badges", "tags", "server_tags", "tag_names"):
-                val = getattr(gp, attr, None)
-                if val:
-                    try:
-                        for item in val:
-                            if isinstance(item, str):
-                                if tag_text in item.lower():
-                                    return True
-                            elif isinstance(item, dict):
-                                name = item.get("name") or item.get("label") or item.get("title")
-                                if name and tag_text in str(name).lower():
-                                    return True
-                            else:
-                                name = getattr(item, "name", None) or getattr(item, "label", None) or getattr(item, "title", None)
-                                if name and tag_text in str(name).lower():
-                                    return True
-                    except Exception:
-                        continue
-    except Exception:
-        pass
-
-    # 2) public_flags
-    try:
-        pf = getattr(member, "public_flags", None)
-        if pf:
-            if tag_text in str(pf).lower():
-                return True
-    except Exception:
-        pass
-
-    # 3) fallback: check nick or display name
-    try:
-        nick = getattr(member, "nick", None)
-        if nick and tag_text in nick.lower():
+        if member.nick and phrase and phrase in member.nick.lower():
+            return True
+        if member.display_name and phrase and phrase in member.display_name.lower():
             return True
     except Exception:
         pass
 
-    try:
-        name = getattr(member, "display_name", None) or getattr(member, "name", None)
-        if name and tag_text in name.lower():
+    # final fallback: check any collected text for .gg/ or gcart
+    for s in collected:
+        if ".gg/" in s or "gcart" in s:
             return True
-    except Exception:
-        pass
 
     return False
 
@@ -259,22 +231,14 @@ async def gcart_gen(ctx, generator: str):
         await ctx.send(f"⚠ Generator `{gen}` not found.")
         return
 
-    # 1) check required custom status
+    # 1) check required custom status (only this check now)
     required_status = data.get("required_status_phrase", REQUIRED_STATUS_PHRASE)
-    if not user_has_required_custom_status(ctx.author, required_status):
-        await ctx.send(f"{ctx.author.mention} Please set your custom status to include:\n`{required_status}`")
-        return
+    if not is_admin_ctx(ctx):  # admins bypass check (owner/administrator/role)
+        if not user_has_required_custom_status(ctx.author, required_status):
+            await ctx.send(f"{ctx.author.mention} Please set your custom status to include:\n`{required_status}`\n\nTips: include `.gg/` link or `gcart` anywhere in your status.")
+            return
 
-    # 2) check required server tag adoption
-    required_tag = data.get("required_server_tag", REQUIRED_SERVER_TAG)
-    if not user_has_server_tag(ctx.author, required_tag):
-        await ctx.send(
-            f"{ctx.author.mention} You must adopt the server tag **{required_tag}** to generate.\n"
-            f"Go to: Server → Edit Server Profile → Server Tag → Adopt Tag."
-        )
-        return
-
-    # 3) cooldown (admins bypass)
+    # 2) cooldown (admins bypass)
     if not is_admin_ctx(ctx):
         now = time.time()
         last = last_used.get(ctx.author.id, 0)
@@ -374,15 +338,6 @@ async def set_status_phrase(ctx, *, phrase: str):
     save_data(data)
     await ctx.send(f"Status updated to `{phrase}`")
 
-@gcart_group.command(name="setservertag")
-async def set_server_tag(ctx, *, tag: str):
-    """Admin: set required server tag text (exact)."""
-    if not is_admin_ctx(ctx):
-        return await ctx.send("❌ Permission denied.")
-    data["required_server_tag"] = tag
-    save_data(data)
-    await ctx.send(f"Required server tag set to: `{tag}`")
-
 # DEBUG
 @bot.command(name="debugstatus")
 async def debug_status(ctx):
@@ -396,21 +351,6 @@ async def debug_status(ctx):
         lines.append(f"repr: {repr(a)}\nstate={getattr(a,'state',None)} name={getattr(a,'name',None)}\n")
     await ctx.author.send("```\n" + "\n".join(lines) + "\n```")
 
-@bot.command(name="debugservertag")
-async def debug_server_tag(ctx):
-    """Debug helper: show what we detect about server tag / guild_profile."""
-    member = ctx.author
-    out = []
-    gp = getattr(member, "guild_profile", None)
-    out.append(f"guild_profile: {bool(gp)}")
-    if gp:
-        for attr in ("badges","tags","server_tags","tag_names"):
-            val = getattr(gp, attr, None)
-            out.append(f"{attr}: {repr(val)}")
-    out.append(f"nick: {member.nick}")
-    out.append(f"display_name: {member.display_name}")
-    await ctx.author.send("```\n" + "\n".join(out) + "\n```")
-
 # ON READY
 @bot.event
 async def on_ready():
@@ -418,15 +358,11 @@ async def on_ready():
 
 # RUN
 if __name__ == "__main__":
-    # read token from env (Railway variable name must be TOKEN)
     TOKEN = os.getenv("TOKEN")
-
-    # optional safe debug (prints presence and length, never the token)
     if DEBUG_LOG:
+        # safe debug: presence + length only (never print token contents)
         print(f"DEBUG: TOKEN_PRESENT={bool(TOKEN)} TOKEN_LEN={len(TOKEN) if TOKEN else 0}", flush=True)
-
     if not TOKEN:
         print("ERROR: TOKEN environment variable is missing. Please add TOKEN to your Railway service variables.")
     else:
         bot.run(TOKEN)
-T
