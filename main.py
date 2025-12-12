@@ -1,11 +1,6 @@
-# main.py - GCart (Status-only verification)
-# - Requires users to have a custom status containing either:
-#     * the configured REQUIRED_STATUS_PHRASE (substring match)
-#     * any ".gg/" shortlink (e.g. .gg/CNFyBV5VnG)
-#     * the word "gcart"
-# - Server tag checks removed
-# - Admins (server administrators or role name ADMIN_ROLE_NAME) bypass cooldown & checks
-# - Put your token in env var TOKEN (Railway). Do NOT hardcode token.
+# main.py - GCart with Free/VIP/Booster tiers + tier-specific embeds + bulk-add
+# Put your bot token in env var TOKEN (Railway)
+# Edit VIP_ROLE_NAME, BOOSTER_ROLE_NAME, ADMIN_ROLE_NAME, REQUIRED_STATUS_PHRASE, SUPPORT_URL as needed.
 
 import os
 import json
@@ -21,32 +16,31 @@ from discord import ui, ButtonStyle
 PREFIX = "!"
 DATA_FILE = "data.json"
 
-# REQUIRED custom status phrase (case-insensitive substring)
 REQUIRED_STATUS_PHRASE = ".gg/CNFyBV5VnG GCart Best Generator ✅"
 
-# Admin role name that bypasses checks and cooldown (case-sensitive)
 ADMIN_ROLE_NAME = "GCartAdmin"
+VIP_ROLE_NAME = "VIP"
+BOOSTER_ROLE_NAME = "Booster"
 
-# Support invite / URL (must start with http(s) or a valid discord invite url)
 SUPPORT_URL = "https://discord.gg/CNFyBV5VnG"
 
-# Colors per generator (hex)
 GEN_COLORS = {
     "mcfa": 0xF1C40F,
+    "mcfa_banned": 0xE74C3C,
+    "mcfa_unbanned": 0x2ECC71,
+    "unchecked_nitro": 0x9AD0F5,
     "netflix": 0xE50914,
     "steam": 0x1B2838,
     "gta5": 0x2ECC71,
-    "jiocinema": 0x00A3E0,
-    "crunchyroll": 0xFF7F00,
-    "gamekey": 0x9B59B6
+    "gamekey": 0x9B59B6,
+    "donut_unbanned": 0x9B59B6,
+    "xbox": 0x6C8EBF
 }
 DEFAULT_COLOR = 0xF1C40F
 
-# Cooldown seconds for normal users (admins bypass)
 COOLDOWN_SECONDS = 200
-last_used = {}  # in-memory: user_id -> timestamp
+last_used = {}
 
-# Optional debug (set DEBUG_LOG=1 in env to print token presence/len safely)
 DEBUG_LOG = os.getenv("DEBUG_LOG", "0") == "1"
 
 # ======================
@@ -66,15 +60,18 @@ def load_data():
     if not os.path.exists(DATA_FILE):
         data = {
             "required_status_phrase": REQUIRED_STATUS_PHRASE,
-            "templates": {"stock_embed_footer": "Powered by GCart Bot"},
             "generators": {
-                "mcfa": {"accounts": [{"email": "jasdja@gmail.com", "password": "sajsj"}]},
-                "netflix": {"accounts": []},
-                "steam": {"accounts": []},
-                "jiocinema": {"accounts": []},
-                "crunchyroll": {"accounts": []},
-                "gta5": {"accounts": []},
-                "gamekey": {"accounts": []}
+                # start empty; fill via admin commands or replace file
+                "mcfa": {"tier": "free", "accounts": [{"email":"jasdja@gmail.com","password":"sajsj"}]},
+                "mcfa_banned": {"tier": "free", "accounts": []},
+                "unchecked_nitro": {"tier": "free", "accounts": []},
+                "mcfa_unbanned": {"tier": "vip", "accounts": []},
+                "donut_unbanned": {"tier": "vip", "accounts": []},
+                "steam": {"tier": "vip", "accounts": []},
+                "gamekey": {"tier": "vip", "accounts": []},
+                "gta5": {"tier": "vip", "accounts": []},
+                "xbox": {"tier": "vip", "accounts": []},
+                "booster_all": {"tier": "booster", "accounts": []}
             }
         }
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -94,31 +91,32 @@ save_data(data)
 # ======================
 # HELPERS
 # ======================
-def is_admin_ctx(ctx):
-    try:
-        if ctx.author.guild_permissions.administrator:
-            return True
-    except Exception:
-        pass
-    # role name bypass
-    return ADMIN_ROLE_NAME in [r.name for r in ctx.author.roles]
-
-def is_admin_member(member: discord.Member):
+def is_admin_member(member: discord.Member) -> bool:
     try:
         if member.guild_permissions.administrator:
             return True
     except Exception:
         pass
-    return ADMIN_ROLE_NAME in [r.name for r in getattr(member, "roles", [])]
+    try:
+        return any(r.name == ADMIN_ROLE_NAME for r in member.roles)
+    except Exception:
+        return False
+
+def is_admin_ctx(ctx) -> bool:
+    return is_admin_member(ctx.author)
+
+def member_has_role_by_name(member: discord.Member, role_name: str) -> bool:
+    if not role_name:
+        return False
+    try:
+        for r in member.roles:
+            if r.name == role_name:
+                return True
+    except Exception:
+        pass
+    return False
 
 def user_has_required_custom_status(member: discord.Member, phrase: str) -> bool:
-    """
-    Tolerant status check:
-      - returns True if status contains the configured phrase (substring, case-insensitive)
-      - OR if it contains ".gg/" (any invite shortlink)
-      - OR if it contains "gcart"
-    Also falls back to checking display_name and nick if presence isn't available.
-    """
     try:
         phrase = (phrase or "").lower().strip()
     except Exception:
@@ -129,7 +127,6 @@ def user_has_required_custom_status(member: discord.Member, phrase: str) -> bool
 
     for act in activities:
         try:
-            # check common fields
             state = getattr(act, "state", None)
             name = getattr(act, "name", None)
             text_options = [state, name, str(act)]
@@ -147,7 +144,6 @@ def user_has_required_custom_status(member: discord.Member, phrase: str) -> bool
         except Exception:
             continue
 
-    # fallback: check nick / display_name
     try:
         if member.nick and phrase and phrase in member.nick.lower():
             return True
@@ -156,38 +152,54 @@ def user_has_required_custom_status(member: discord.Member, phrase: str) -> bool
     except Exception:
         pass
 
-    # final fallback: check any collected text for .gg/ or gcart
     for s in collected:
         if ".gg/" in s or "gcart" in s:
             return True
 
     return False
 
-def build_premium_embed(user, gen: str, account: dict) -> discord.Embed:
+def build_embed_for_tier(user: discord.User, gen: str, account: dict, tier: str) -> discord.Embed:
+    """
+    Build different DM embed content per tier.
+    """
+    gen = gen.upper()
     color = GEN_COLORS.get(gen.lower(), DEFAULT_COLOR)
+
+    if tier == "free":
+        title_line = "# 🎉 GCart Delivery Is Here!"
+        subtitle = "> Thanks for generating. Here is your free account:"
+    elif tier == "vip":
+        title_line = "# 👑 VIP Delivery Is Here!"
+        subtitle = "> ✨ U GOT ACCOUNT (VIP GEN) — Congrats! Here is your VIP account:"
+    elif tier == "booster":
+        title_line = "# 🔥 BOOSTER Delivery Is Here!"
+        subtitle = "> 🚀 BOOSTER GEN — Exclusive account delivered! Enjoy:"
+    else:
+        title_line = "# 🎉 GCart Delivery Is Here!"
+        subtitle = "> Here is your account:"
+
     description = (
-        f"# 🎉 GCart Delivery Is Here!\n"
-        f"> ✨ Your premium account has been generated successfully!\n\n"
-        f"**🔧 Generator:** **{gen.upper()}**\n\n"
+        f"{title_line}\n"
+        f"{subtitle}\n\n"
+        f"**🔧 Generator:** **{gen}**\n\n"
         f"📧 **Email:**\n```{account.get('email','N/A')}```\n\n"
         f"🔐 **Password:**\n```{account.get('password','N/A')}```\n\n"
         f"💛 *Powered by GCart Bot*"
     )
+
     embed = discord.Embed(description=description, color=color)
     try:
         embed.set_thumbnail(url=user.display_avatar.url)
     except Exception:
         pass
     try:
-        embed.set_footer(text="GCart • Ultra Premium", icon_url=bot.user.display_avatar.url)
+        embed.set_footer(text=f"GCart • {tier.capitalize()} Gen", icon_url=bot.user.display_avatar.url)
     except Exception:
-        embed.set_footer(text="GCart • Ultra Premium")
+        embed.set_footer(text=f"GCart • {tier.capitalize()} Gen")
     embed.timestamp = discord.utils.utcnow()
     return embed
 
-# ======================
-# BUTTON VIEW (Support only)
-# ======================
+# Support View
 class SupportOnlyView(ui.View):
     def __init__(self, timeout: int = 180):
         super().__init__(timeout=timeout)
@@ -197,13 +209,37 @@ class SupportOnlyView(ui.View):
         except Exception:
             pass
 
+# Tier permission check (roles-only)
+def can_generate(member: discord.Member, generator_name: str) -> (bool, str):
+    if is_admin_member(member):
+        return True, ""
+    gens = data.get("generators", {})
+    gen = gens.get(generator_name)
+    if not gen:
+        return False, "Generator not found."
+    tier = gen.get("tier", "free").lower()
+    # booster role can access everything
+    if member_has_role_by_name(member, BOOSTER_ROLE_NAME):
+        return True, ""
+    if tier == "free":
+        return True, ""
+    if tier == "vip":
+        if member_has_role_by_name(member, VIP_ROLE_NAME):
+            return True, ""
+        return False, f"You need the **{VIP_ROLE_NAME}** role to generate VIP items."
+    if tier == "booster":
+        if member_has_role_by_name(member, BOOSTER_ROLE_NAME):
+            return True, ""
+        return False, f"You need the **{BOOSTER_ROLE_NAME}** role to generate Booster items."
+    return False, "Access denied by tier."
+
 # ======================
 # COMMANDS
 # ======================
 @bot.command(name="help")
 async def help_cmd(ctx):
     msg = f"""
-GCart Ultra Premium Bot Commands
+GCart Bot Commands
 
 USER:
   {PREFIX}gcart gen <generator>
@@ -214,9 +250,14 @@ ADMIN:
   {PREFIX}gen add <generator> <email> <password>
   {PREFIX}gen remove <generator> <index>
   {PREFIX}gen list <generator>
-  {PREFIX}gcart creategen <generator>
+  {PREFIX}gcart creategen <generator> <tier>
   {PREFIX}gcart deletegen <generator>
   {PREFIX}gcart setstatusphrase <text>
+
+BULK ADD (admin):
+  {PREFIX}gen bulkadd <generator> <paste block>
+    - Paste lines with "email password" per line (password may contain spaces).
+    OR attach a text/CSV file to the command; bot will read the attachment.
 """
     await ctx.send(f"```{msg}```")
 
@@ -231,14 +272,19 @@ async def gcart_gen(ctx, generator: str):
         await ctx.send(f"⚠ Generator `{gen}` not found.")
         return
 
-    # 1) check required custom status (only this check now)
+    allowed, reason = can_generate(ctx.author, gen)
+    if not allowed:
+        await ctx.send(f"{ctx.author.mention} {reason}")
+        return
+
+    # custom status check for non-admins
     required_status = data.get("required_status_phrase", REQUIRED_STATUS_PHRASE)
-    if not is_admin_ctx(ctx):  # admins bypass check (owner/administrator/role)
+    if not is_admin_ctx(ctx):
         if not user_has_required_custom_status(ctx.author, required_status):
             await ctx.send(f"{ctx.author.mention} Please set your custom status to include:\n`{required_status}`\n\nTips: include `.gg/` link or `gcart` anywhere in your status.")
             return
 
-    # 2) cooldown (admins bypass)
+    # cooldown
     if not is_admin_ctx(ctx):
         now = time.time()
         last = last_used.get(ctx.author.id, 0)
@@ -248,31 +294,42 @@ async def gcart_gen(ctx, generator: str):
             return
         last_used[ctx.author.id] = now
 
-    accounts = data["generators"][gen]["accounts"]
+    gen_info = data["generators"][gen]
+    accounts = gen_info.get("accounts", [])
     if not accounts:
         await ctx.send("⚠ No stock available.")
         return
 
     account = random.choice(accounts)
-    embed = build_premium_embed(ctx.author, gen, account)
+    tier = gen_info.get("tier", "free")
+    embed = build_embed_for_tier(ctx.author, gen, account, tier)
     view = SupportOnlyView()
     try:
         await ctx.author.send(embed=embed, view=view)
-        await ctx.send(f"✨ {ctx.author.mention} Check your DMs — your premium account is ready!")
+        await ctx.send(f"✨ {ctx.author.mention} Check your DMs — your account has been sent!")
     except discord.Forbidden:
         await ctx.send("⚠ Please enable DMs from server members!")
 
 @gcart_group.command(name="stock")
 async def gcart_stock(ctx):
     embed = discord.Embed(title="📦 GCart Stock", color=0xF1C40F)
-    for name, info in data["generators"].items():
-        embed.add_field(name=f"🔹 {name.upper()}", value=f"**{len(info['accounts'])}** in stock", inline=False)
+    gens = data.get("generators", {})
+    tiers = {"free": [], "vip": [], "booster": []}
+    for name, info in gens.items():
+        t = info.get("tier", "free").lower()
+        tiers.setdefault(t, []).append((name, len(info.get("accounts", []))))
+    for t in ("free", "vip", "booster"):
+        items = tiers.get(t, [])
+        if not items:
+            continue
+        text = "\n".join([f"🔹 **{n.upper()}** — {count} in stock" for n, count in items])
+        embed.add_field(name=f"{t.upper()} GENERATORS", value=text, inline=False)
     await ctx.send(embed=embed)
 
 # --------------- admin group ---------------
 @bot.group(name="gen", invoke_without_command=True)
 async def gen_group(ctx):
-    await ctx.send("Admin: add / remove / list")
+    await ctx.send("Admin: add / remove / list / bulkadd")
 
 @gen_group.command(name="add")
 async def add_acc(ctx, generator: str, email: str, password: str):
@@ -306,18 +363,92 @@ async def list_acc(ctx, generator: str):
     if not accounts:
         return await ctx.send("No accounts.")
     msg = "\n".join([f"{i}: {a['email']}" for i, a in enumerate(accounts)])
-    await ctx.send(f"```{msg}```")
+    # if too long, DM to admin
+    if len(msg) > 1900:
+        await ctx.author.send("Full list:", file=None)
+        chunks = [msg[i:i+1900] for i in range(0, len(msg), 1900)]
+        for c in chunks:
+            await ctx.author.send(f"```\n{c}\n```")
+        await ctx.send("Sent full list to your DMs.")
+    else:
+        await ctx.send(f"```{msg}```")
 
-@gcart_group.command(name="creategen")
-async def create_gen(ctx, generator: str):
+@gen_group.command(name="bulkadd")
+async def bulk_add(ctx, generator: str, *, pasted: str = None):
+    """
+    Bulk add accounts to a generator.
+    Usage:
+      1) Paste multiple lines after the command:
+         !gen bulkadd mcfa
+         (then paste lines in same message)
+      2) Or attach a .txt/.csv file to the command (first attachment will be read).
+    Format per line:
+      email password
+    If password contains spaces, it will take everything after first whitespace as password.
+    """
     if not is_admin_ctx(ctx):
         return await ctx.send("❌ Permission denied.")
     gen = generator.lower()
+    if gen not in data["generators"]:
+        return await ctx.send("Generator doesn't exist.")
+
+    text = ""
+    # prefer attachment if present
+    if ctx.message.attachments:
+        try:
+            att = ctx.message.attachments[0]
+            raw = await att.read()
+            text = raw.decode("utf-8", errors="ignore")
+        except Exception as e:
+            return await ctx.send(f"Failed to read attachment: {e}")
+    else:
+        # if no attachment, use pasted argument
+        if not pasted:
+            return await ctx.send("No data provided. Attach a .txt file or paste lines after the command.")
+        text = pasted
+
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    added = 0
+    errors = []
+    for i, line in enumerate(lines):
+        # support CSV or space-separated
+        if "," in line:
+            parts = [p.strip() for p in line.split(",", 1)]
+        else:
+            parts = line.split(None, 1)  # split on first whitespace: email, rest
+        if len(parts) == 0:
+            continue
+        if len(parts) == 1:
+            errors.append((i+1, "missing password"))
+            continue
+        email = parts[0].strip()
+        password = parts[1].strip()
+        if not email or not password:
+            errors.append((i+1, "invalid email/password"))
+            continue
+        data["generators"][gen].setdefault("accounts", []).append({"email": email, "password": password})
+        added += 1
+
+    save_data(data)
+    msg = f"Bulk add finished. Added {added} accounts to `{gen}`."
+    if errors:
+        msg += " Some lines failed:\n" + ", ".join([f"line{ln}:{why}" for ln, why in errors])
+    await ctx.send(msg)
+
+# create generator with tier
+@gcart_group.command(name="creategen")
+async def create_gen(ctx, generator: str, tier: str = "free"):
+    if not is_admin_ctx(ctx):
+        return await ctx.send("❌ Permission denied.")
+    gen = generator.lower()
+    tier = tier.lower()
+    if tier not in ("free", "vip", "booster"):
+        return await ctx.send("Tier must be one of: free, vip, booster")
     if gen in data["generators"]:
         return await ctx.send("Generator already exists.")
-    data["generators"][gen] = {"accounts": []}
+    data["generators"][gen] = {"tier": tier, "accounts": []}
     save_data(data)
-    await ctx.send(f"Created generator `{gen}`.")
+    await ctx.send(f"Created generator `{gen}` with tier `{tier}`.")
 
 @gcart_group.command(name="deletegen")
 async def delete_gen(ctx, generator: str):
@@ -360,7 +491,6 @@ async def on_ready():
 if __name__ == "__main__":
     TOKEN = os.getenv("TOKEN")
     if DEBUG_LOG:
-        # safe debug: presence + length only (never print token contents)
         print(f"DEBUG: TOKEN_PRESENT={bool(TOKEN)} TOKEN_LEN={len(TOKEN) if TOKEN else 0}", flush=True)
     if not TOKEN:
         print("ERROR: TOKEN environment variable is missing. Please add TOKEN to your Railway service variables.")
