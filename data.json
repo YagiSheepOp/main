@@ -1,0 +1,19 @@
+{
+  "required_status_phrase": ".gg/gcart",
+  "templates": {
+    "dm_embed_title": "Gcart Delivery is here 🚚",
+    "dm_embed_desc": "Thanks For Generating Account — Here is your account:",
+    "stock_embed_title": "Gcart Stock",
+    "stock_embed_footer": "Powered by GCart Bot"
+  },
+  "generators": {
+    "mcfa": {
+      "accounts": [
+        {"email": "sanajs@email.com", "password": "sanjs"},
+        {"email": "another@example.com", "password": "pass123"}
+      ]
+    },
+    "netflix": {"accounts": []},
+    "steam": {"accounts": []}
+  }
+}
