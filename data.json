@@ -1,19 +1,35 @@
 {
-  "required_status_phrase": ".gg/gcart",
+  "required_status_phrase": ".gg/CNFyBV5VnG GCart Best Generator ✅",
+  "required_server_tag": "GCrt",
   "templates": {
-    "dm_embed_title": "Gcart Delivery is here 🚚",
-    "dm_embed_desc": "Thanks For Generating Account — Here is your account:",
-    "stock_embed_title": "Gcart Stock",
     "stock_embed_footer": "Powered by GCart Bot"
   },
   "generators": {
     "mcfa": {
       "accounts": [
-        {"email": "sanajs@email.com", "password": "sanjs"},
-        {"email": "another@example.com", "password": "pass123"}
+        {
+          "email": "jasdja@gmail.com",
+          "password": "sajsj"
+        }
       ]
     },
-    "netflix": {"accounts": []},
-    "steam": {"accounts": []}
+    "netflix": {
+      "accounts": []
+    },
+    "steam": {
+      "accounts": []
+    },
+    "jiocinema": {
+      "accounts": []
+    },
+    "crunchyroll": {
+      "accounts": []
+    },
+    "gta5": {
+      "accounts": []
+    },
+    "gamekey": {
+      "accounts": []
+    }
   }
 }
