@@ -1,341 +1,310 @@
-# main.py (updated)
-"""
-Discord bot with custom embed delivery using your emojis.
-"""
-
+# main.py - Fixed required-status + Ultra Premium GCart Bot (cooldown removed earlier)
 import os
-import logging
+import json
 import random
-import asyncio
+import time
 import discord
-from discord import ActivityType, Embed
-from discord.errors import Forbidden
-from datetime import datetime, timedelta
+from discord.ext import commands
+from discord import ui, ButtonStyle
 
-logging.basicConfig(level=logging.INFO)
+# ======================
+# CONFIG
+# ======================
+PREFIX = "!"
+DATA_FILE = "data.json"
 
-# ---------------- CONFIG ----------------
-TRIGGERS = {
-    "gcart gen mcfa": [
-        "christiebailey93@hotmail.co.uk:Chr15t13123",
-        "pedrosallesfernandes@hotmail.com:Pedro2004@"
-    ],
-    "gcart gen stock": [
-        "20+ "
-    ],
+# THE exact required status phrase (set this in your Discord custom status)
+REQUIRED_STATUS_PHRASE = ".gg/CNFyBV5VnG GCart Best Generator ✅"
+
+# admin role
+ADMIN_ROLE_NAME = "GCartAdmin"
+
+# Support button link (replace with your real invite or URL)
+SUPPORT_URL = "https://discord.gg/CNFyBV5VnG"   # <-- replace with a valid URL
+
+# Generator Colors
+GEN_COLORS = {
+    "mcfa": 0xF1C40F,
+    "netflix": 0xE50914,
+    "steam": 0x1B2838,
+    "gta5": 0x2ECC71,
 }
+DEFAULT_COLOR = 0xF1C40F
 
-DELIVERY_MODE = {
-    "gcart gen mcfa": "dm",
-    "gcart gen stock": "channel",
-}
+# Cooldown seconds for non-admin users
+COOLDOWN_SECONDS = 200
 
-DISTRIBUTION_MODE = {
-    "gcart gen mcfa": "random_repeat",
-    "gcart gen stock": "round_robin",
-}
+# In-memory cooldown tracker: user_id -> last_timestamp (float)
+last_used = {}
 
-STOCK_MESSAGES = {
-    "gcart gen stock": "{command} — {remaining} stock remaining"
-}
-
-REQUIRED_STATUS = ".gg/CNFyBV5VnG Best Mcfa Gen"
-
-# Custom emojis (as you provided)
-EMOJI_BOOK      = "<a:400125purplebook:1447592335012532334>"
-EMOJI_ARROW     = "<a:arrow_blueright:1434864844405735424>"
-EMOJI_MINECRAFT = "<a:MinecraftAnimated:1390248064207552573>"
-
-DM_TITLE = "GCART DILEVERY UNDER 1 SECOND"   # user requested title exactly
-DM_FOOTER = "If it doesn't work, tell admin."
-
-COOLDOWN_SECONDS = 60
-IGNORE_CASE = True
-NOTIFY_IN_CHANNEL_ON_FAIL = True
-# -----------------------------------------
-
+# ======================
+# INTENTS
+# ======================
 intents = discord.Intents.default()
 intents.message_content = True
-intents.presences = True
 intents.members = True
+intents.presences = True
 
-client = discord.Client(intents=intents)
+bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
-cooldowns = {}
-file_locks = {}
-round_robin_indices = {}
+# ======================
+# LOAD/SAVE DATA
+# ======================
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        data = {
+            "required_status_phrase": REQUIRED_STATUS_PHRASE,
+            "templates": {"stock_embed_footer": "Powered by GCart Bot"},
+            "generators": {
+                "mcfa": {"accounts": [{"email": "jasdja@gmail.com", "password": "sajsj"}]},
+                "netflix": {"accounts": []},
+                "steam": {"accounts": []}
+            }
+        }
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        return data
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def normalize(s: str) -> str:
-    return s.strip().lower() if IGNORE_CASE and isinstance(s, str) else (s.strip() if isinstance(s, str) else s)
+def save_data(d):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(d, f, indent=2)
 
-def get_lock(key: str) -> asyncio.Lock:
-    lock = file_locks.get(key)
-    if lock is None:
-        lock = asyncio.Lock()
-        file_locks[key] = lock
-    return lock
+data = load_data()
 
-async def load_file_lines(path: str):
-    if not os.path.exists(path):
-        return []
-    with open(path, "r", encoding="utf-8") as f:
-        return [ln.rstrip("\n") for ln in f.readlines() if ln.strip()]
+# FORCE update the stored required phrase to the one you want (keeps it consistent)
+data["required_status_phrase"] = REQUIRED_STATUS_PHRASE
+save_data(data)
 
-async def write_file_lines_atomic(path: str, lines: list):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + ("\n" if lines else ""))
-    os.replace(tmp, path)
+# ======================
+# HELPERS
+# ======================
+def is_admin_ctx(ctx):
+    if ctx.author.guild_permissions.administrator:
+        return True
+    return ADMIN_ROLE_NAME in [r.name for r in ctx.author.roles]
 
-async def pick_account(source, distribution_mode: str, remove_on_deliver: bool):
-    if isinstance(source, list):
-        key = f"__list_{id(source)}"
-        lock = get_lock(key)
-        async with lock:
-            if not source:
-                return None
-            if distribution_mode == "consume":
-                choice = random.choice(source)
-                if remove_on_deliver:
-                    try:
-                        source.remove(choice)
-                    except ValueError:
-                        pass
-                return choice
-            elif distribution_mode == "random_repeat":
-                return random.choice(source)
-            elif distribution_mode == "round_robin":
-                idx = round_robin_indices.get(key, 0)
-                choice = source[idx % len(source)]
-                round_robin_indices[key] = (idx + 1) % len(source)
-                return choice
-            else:
-                return random.choice(source)
+def is_admin_member(member: discord.Member):
+    try:
+        if member.guild_permissions.administrator:
+            return True
+    except Exception:
+        pass
+    return ADMIN_ROLE_NAME in [r.name for r in getattr(member, "roles", [])]
 
-    if isinstance(source, str):
-        filename = source
-        path = os.path.join(os.path.dirname(__file__), filename)
-        lock = get_lock(path)
-        async with lock:
-            lines = await load_file_lines(path)
-            if not lines:
-                return None
-            if distribution_mode == "consume":
-                choice = random.choice(lines)
-                if remove_on_deliver:
-                    removed = False
-                    new_lines = []
-                    for ln in lines:
-                        if (not removed) and ln == choice:
-                            removed = True
-                            continue
-                        new_lines.append(ln)
-                    await write_file_lines_atomic(path, new_lines)
-                return choice
-            elif distribution_mode == "random_repeat":
-                return random.choice(lines)
-            elif distribution_mode == "round_robin":
-                key = path
-                idx = round_robin_indices.get(key, 0)
-                choice = lines[idx % len(lines)]
-                round_robin_indices[key] = (idx + 1) % len(lines)
-                return choice
-            else:
-                return random.choice(lines)
-    return None
-
-def get_remaining(source) -> int:
-    if isinstance(source, list):
-        return len(source)
-    if isinstance(source, str):
-        path = os.path.join(os.path.dirname(__file__), source)
-        if not os.path.exists(path):
-            return 0
-        with open(path, "r", encoding="utf-8") as f:
-            return sum(1 for ln in f.readlines() if ln.strip())
-    return 0
-
-def user_has_required_status(member: discord.Member) -> bool:
-    if not member:
+def user_has_required_custom_status(member: discord.Member, phrase: str) -> bool:
+    phrase = phrase.lower()
+    activities = getattr(member, "activities", None)
+    if not activities:
         return False
-    acts = getattr(member, "activities", None)
-    if not acts:
-        return False
-    for act in acts:
+    for act in activities:
         try:
-            if getattr(act, "type", None) == ActivityType.custom:
-                state = getattr(act, "state", None) or ""
-                if not state:
-                    continue
-                if IGNORE_CASE:
-                    if REQUIRED_STATUS.lower() in state.lower():
-                        return True
-                else:
-                    if REQUIRED_STATUS in state:
-                        return True
-        except Exception:
-            continue
+            state = getattr(act, "state", None)
+            if state and phrase in str(state).lower():
+                return True
+            name = getattr(act, "name", None)
+            if name and phrase in str(name).lower():
+                return True
+            if phrase in str(act).lower():
+                return True
+        except:
+            pass
     return False
 
-def on_cooldown(user_id: int, command: str) -> (bool, float):
-    key = (user_id, normalize(command))
-    next_allowed = cooldowns.get(key)
-    now = datetime.utcnow()
-    if next_allowed and next_allowed > now:
-        return True, (next_allowed - now).total_seconds()
-    return False, 0.0
-
-def set_cooldown(user_id: int, command: str, seconds: int):
-    key = (user_id, normalize(command))
-    cooldowns[key] = datetime.utcnow() + timedelta(seconds=seconds)
-
-# --------- NEW: custom embed builder & sender ----------
-def build_custom_embed(user: discord.abc.Snowflake, command: str, account: str) -> Embed:
-    """
-    Build embed using the three custom emojis and the layout you requested.
-    Email -- >> <email>
-    Password -->> <password>
-    Footer instructs to tell admin if it doesn't work.
-    No timestamp.
-    """
-    # parse account into email/password
-    email = account
-    password = ""
-    if isinstance(account, str) and ":" in account:
-        # split only on first colon to allow colons in password
-        parts = account.split(":", 1)
-        email = parts[0].strip()
-        password = parts[1].strip()
-    else:
-        # keep entire account in email field if no separator
-        email = account.strip()
-
-    title = f"{EMOJI_BOOK}  {DM_TITLE}"
-    embed = Embed(title=title, description=f"{EMOJI_ARROW}  **Your requested account is below**", color=0x6A3BE2)
-    # Email and password fields using exactly the text layout requested
-    embed.add_field(name="Email -- >>", value=f"`{email}`", inline=False)
-    if password:
-        embed.add_field(name="Password -->>", value=f"`{password}`", inline=False)
-    else:
-        embed.add_field(name="Password -->>", value="`(none)`", inline=False)
-
-    # short status field with the minecraft emoji
-    embed.add_field(name=f"{EMOJI_MINECRAFT} Status", value="Delivered — if it doesn't work tell admin.", inline=False)
-
-    # footer (no timestamp)
-    display = getattr(user, "display_name", getattr(user, "name", str(user)))
-    embed.set_footer(text=f"Requested by {display} • GCart")
+def build_premium_embed(user, gen: str, account: dict) -> discord.Embed:
+    color = GEN_COLORS.get(gen.lower(), DEFAULT_COLOR)
+    description = (
+        f"# 🎉 GCart Delivery Is Here!\n"
+        f"> ✨ Your premium account has been generated successfully!\n\n"
+        f"**🔧 Generator:** **{gen.upper()}**\n\n"
+        f"📧 **Email:**\n```{account.get('email','N/A')}```\n\n"
+        f"🔐 **Password:**\n```{account.get('password','N/A')}```\n\n"
+        f"💛 *Powered by GCart Bot*"
+    )
+    embed = discord.Embed(description=description, color=color)
+    try:
+        embed.set_thumbnail(url=user.display_avatar.url)
+    except:
+        pass
+    try:
+        embed.set_footer(text="GCart • Ultra Premium", icon_url=bot.user.display_avatar.url)
+    except:
+        embed.set_footer(text="GCart • Ultra Premium")
+    embed.timestamp = discord.utils.utcnow()
     return embed
 
-async def send_custom_delivery(target, user, command: str, account: str):
-    """
-    target: discord.User/Member (for DM) or a TextChannel (for public).
-    user: the requester Member/User for footer and mention.
-    """
-    embed = build_custom_embed(user, command, account)
-    try:
-        if isinstance(target, (discord.User, discord.Member)):
-            await target.send(embed=embed)
-        else:
-            await target.send(content=f"{user.mention}", embed=embed)
-    except Forbidden:
-        # fallback notifications
-        if isinstance(target, (discord.User, discord.Member)):
-            # couldn't DM the user
-            # We won't re-add the account here; just notify
-            print("Couldn't DM user; DMs may be closed.")
-        else:
-            try:
-                await target.send("I don't have permission to send embeds here. Please check my permissions.")
-            except Exception:
-                pass
-    except Exception as e:
-        print("Error sending custom delivery:", e)
-# ------------------------------------------------------
+# ======================
+# SUPPORT BUTTON VIEW
+# ======================
+class SupportOnlyView(ui.View):
+    def __init__(self, timeout: int = 180):
+        super().__init__(timeout=timeout)
+        try:
+            support_btn = ui.Button(label="Support", style=ButtonStyle.link, url=SUPPORT_URL)
+            self.add_item(support_btn)
+        except Exception:
+            pass
 
-@client.event
-async def on_ready():
-    logging.info(f"Logged in as {client.user} (id: {client.user.id})")
-    logging.info("Bot is ready.")
+# ======================
+# COMMANDS
+# ======================
+@bot.command(name="help")
+async def help_cmd(ctx):
+    msg = f"""
+GCart Ultra Premium Bot Commands
 
-@client.event
-async def on_message(message: discord.Message):
-    if message.author.bot:
+USER:
+  {PREFIX}gcart gen <generator>
+  {PREFIX}gcart stock
+  {PREFIX}debugstatus
+
+ADMIN:
+  {PREFIX}gen <generator> add <email> <password>
+  {PREFIX}gen <generator> remove <index>
+  {PREFIX}gen <generator> list
+  {PREFIX}gcart creategen <generator>
+  {PREFIX}gcart deletegen <generator>
+  {PREFIX}gcart setstatusphrase <text>
+"""
+    await ctx.send(f"```{msg}```")
+
+@bot.group(name="gcart", invoke_without_command=True)
+async def gcart_group(ctx):
+    await ctx.send(f"Use `{PREFIX}help` for commands.")
+
+@gcart_group.command(name="gen")
+async def gcart_gen(ctx, generator: str):
+    gen = generator.lower()
+    if gen not in data["generators"]:
+        await ctx.send(f"⚠ Generator `{gen}` not found.")
         return
-    if not message.guild:
+
+    # Use the forced/stored phrase (we wrote it earlier)
+    required = data.get("required_status_phrase", REQUIRED_STATUS_PHRASE)
+    if not user_has_required_custom_status(ctx.author, required):
+        await ctx.send(f"{ctx.author.mention} Please set your custom status to include:\n`{required}`")
         return
 
-    content = message.content or ""
-    text = normalize(content)
-
-    for cmd_text, source in TRIGGERS.items():
-        if text == normalize(cmd_text):
-            user = message.author
-
-            # required status check
-            if not user_has_required_status(user):
-                await message.channel.send(
-                    f"{user.mention} To use this command you must add `{REQUIRED_STATUS}` to your custom status. "
-                    "Set your custom status (bottom-left avatar → Set Status) and include that text."
-                )
-                return
-
-            # cooldown
-            on_cd, secs = on_cooldown(user.id, cmd_text)
-            if on_cd:
-                await message.channel.send(f"{user.mention} Please wait {int(secs)}s before using this command again.")
-                return
-
-            dist_mode = DISTRIBUTION_MODE.get(cmd_text, "random_repeat")
-            remove_flag = (dist_mode == "consume")
-
-            account = await pick_account(source, distribution_mode=dist_mode, remove_on_deliver=remove_flag)
-            if not account:
-                await message.channel.send(f"{user.mention} Sorry — no accounts available for `{cmd_text}`. Ask an admin.")
-                return
-
-            mode = DELIVERY_MODE.get(cmd_text, "dm")
-
-            try:
-                # use the custom embed sender for both DM and channel
-                if mode == "dm":
-                    await send_custom_delivery(user, user, cmd_text, account)
-                    try:
-                        await message.add_reaction("✅")
-                    except Exception:
-                        pass
-                else:
-                    await send_custom_delivery(message.channel, user, cmd_text, account)
-                    try:
-                        await message.add_reaction("✅")
-                    except Exception:
-                        pass
-
-                set_cooldown(user.id, cmd_text, COOLDOWN_SECONDS)
-
-                # If this is the stock command and we want to show remaining, send stock message (only for channel mode)
-                if cmd_text in STOCK_MESSAGES:
-                    remaining = get_remaining(source)
-                    template = STOCK_MESSAGES.get(cmd_text)
-                    if template and mode == "channel":
-                        try:
-                            await message.channel.send(template.format(command=cmd_text, remaining=remaining))
-                        except Exception:
-                            pass
-
-            except Forbidden:
-                if mode == "dm" and NOTIFY_IN_CHANNEL_ON_FAIL:
-                    await message.channel.send(f"{user.mention} I couldn't DM you — please enable DMs from server members.")
-                elif mode == "channel" and NOTIFY_IN_CHANNEL_ON_FAIL:
-                    try:
-                        await user.send("I couldn't post publicly in that channel (missing permissions). Please contact an admin.")
-                    except Exception:
-                        pass
-
+    # Cooldown check (admins bypass)
+    if not is_admin_ctx(ctx):
+        now = time.time()
+        last = last_used.get(ctx.author.id, 0)
+        remaining = COOLDOWN_SECONDS - (now - last)
+        if remaining > 0:
+            await ctx.send(f"{ctx.author.mention} ⏳ Please wait **{int(remaining)}s** before generating again.")
             return
+        last_used[ctx.author.id] = now
 
+    accounts = data["generators"][gen]["accounts"]
+    if not accounts:
+        await ctx.send("⚠ No stock available.")
+        return
+
+    account = random.choice(accounts)
+    embed = build_premium_embed(ctx.author, gen, account)
+    view = SupportOnlyView()
+    try:
+        await ctx.author.send(embed=embed, view=view)
+        await ctx.send(f"✨ {ctx.author.mention} Check your DMs — your premium account is ready!")
+    except discord.Forbidden:
+        await ctx.send("⚠ Please enable DMs from server members!")
+
+@gcart_group.command(name="stock")
+async def gcart_stock(ctx):
+    embed = discord.Embed(title="📦 GCart Stock", color=0xF1C40F)
+    for name, info in data["generators"].items():
+        embed.add_field(name=f"🔹 {name.upper()}", value=f"**{len(info['accounts'])}** in stock", inline=False)
+    await ctx.send(embed=embed)
+
+# ADMIN GROUP
+@bot.group(name="gen", invoke_without_command=True)
+async def gen_group(ctx):
+    await ctx.send("Admin: add / remove / list")
+
+@gen_group.command(name="add")
+async def add_acc(ctx, gen: str, email: str, password: str):
+    if not is_admin_ctx(ctx):
+        return await ctx.send("❌ Permission denied.")
+    gen = gen.lower()
+    if gen not in data["generators"]:
+        return await ctx.send("Generator doesn't exist.")
+    data["generators"][gen]["accounts"].append({"email": email, "password": password})
+    save_data(data)
+    await ctx.send("Added.")
+
+@gen_group.command(name="remove")
+async def remove_acc(ctx, gen: str, index: int):
+    if not is_admin_ctx(ctx):
+        return await ctx.send("❌ Permission denied.")
+    gen = gen.lower()
+    try:
+        removed = data["generators"][gen]["accounts"].pop(index)
+        save_data(data)
+        await ctx.send(f"Removed {removed['email']}")
+    except Exception:
+        await ctx.send("Invalid index.")
+
+@gen_group.command(name="list")
+async def list_acc(ctx, gen: str):
+    if not is_admin_ctx(ctx):
+        return await ctx.send("❌ Permission denied.")
+    accs = data["generators"][gen.lower()]["accounts"]
+    if not accs:
+        return await ctx.send("No accounts.")
+    msg = "\n".join([f"{i}: {a['email']}" for i, a in enumerate(accs)])
+    await ctx.send(f"```{msg}```")
+
+@gcart_group.command(name="creategen")
+async def cg(ctx, gen: str):
+    if not is_admin_ctx(ctx):
+        return await ctx.send("❌ Permission denied.")
+    gen = gen.lower()
+    data["generators"][gen] = {"accounts": []}
+    save_data(data)
+    await ctx.send("Generator created.")
+
+@gcart_group.command(name="deletegen")
+async def dg(ctx, gen: str):
+    if not is_admin_ctx(ctx):
+        return await ctx.send("❌ Permission denied.")
+    gen = gen.lower()
+    if gen in data["generators"]:
+        del data["generators"][gen]
+        save_data(data)
+        await ctx.send("Generator deleted.")
+    else:
+        await ctx.send("Generator not found.")
+
+@gcart_group.command(name="setstatusphrase")
+async def ssp(ctx, *, phrase: str):
+    if not is_admin_ctx(ctx):
+        return await ctx.send("❌ Permission denied.")
+    data["required_status_phrase"] = phrase
+    save_data(data)
+    await ctx.send(f"Status updated to `{phrase}`")
+
+# DEBUG
+@bot.command(name="debugstatus")
+async def dbg(ctx):
+    acts = getattr(ctx.author, "activities", [])
+    out = ""
+    for a in acts:
+        out += f"{repr(a)}\nstate={getattr(a,'state',None)}\n\n"
+    if not out:
+        await ctx.author.send("No activities available — bot may not be receiving presence info.")
+    else:
+        await ctx.author.send(f"```\n{out}\n```")
+
+# READY
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+
+# RUN
 if __name__ == "__main__":
-    TOKEN = os.getenv("MTQ0ODY4MzkzNjgxNjU2NjQ0Nw.GE3inB.mmVBsVO3vPFBBx2WqrfOlwagmHY-6JSHScznoI")
-    if not TOKEN:
-        raise SystemExit("Set DISCORD_BOT_TOKEN env var in Railway (Variables tab).")
-    client.run(TOKEN)
+    token = "MTQ0ODY4MzkzNjgxNjU2NjQ0Nw.GlsiFt.QbpXxbS24Je0zvtM9fwDsnNsCVTXE5TMNG-bWY"   # <-- put bot token here
+    if token.startswith("YOUR") or token.strip() == "":
+        print("ERROR: Replace the token variable with your real bot token in the script.")
+    else:
+        bot.run(token)
