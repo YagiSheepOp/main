@@ -1,34 +1,65 @@
 {
-  "required_status_phrase": ".gg/CNFyBV5VnG GCart Best Generator ✅",
-  "required_server_tag": "GCrt",
-  "templates": {
-    "stock_embed_footer": "Powered by GCart Bot"
-  },
+  "required_status_phrase": ".gg/CNFyBV5VnG",
   "generators": {
     "mcfa": {
+      "tier": "free",
       "accounts": [
         {
-          "email": "jasdja@gmail.com",
-          "password": "sajsj"
+          "email": "sample1@example.com",
+          "password": "pass123"
         }
       ]
     },
-    "netflix": {
+    "nitro_unchecked": {
+      "tier": "free",
       "accounts": []
     },
-    "steam": {
+    "mcfa_banned": {
+      "tier": "free",
+      "accounts": []
+    },
+    "hypixel_unbanned": {
+      "tier": "free",
+      "accounts": []
+    },
+    "xbox": {
+      "tier": "vip",
+      "accounts": []
+    },
+    "mcfa_unbanned": {
+      "tier": "vip",
+      "accounts": []
+    },
+    "donut_unbanned": {
+      "tier": "vip",
       "accounts": []
     },
     "jiocinema": {
+      "tier": "vip",
       "accounts": []
     },
     "crunchyroll": {
+      "tier": "vip",
+      "accounts": []
+    },
+    "mcfa_changeable": {
+      "tier": "booster",
+      "accounts": []
+    },
+    "mcfa_password_changeable": {
+      "tier": "booster",
+      "accounts": []
+    },
+    "steam": {
+      "tier": "booster",
       "accounts": []
     },
     "gta5": {
+      "tier": "booster",
       "accounts": []
     },
     "gamekey": {
+      "tier": "booster",
       "accounts": []
     }
   }
