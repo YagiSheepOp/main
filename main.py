@@ -303,7 +303,7 @@ async def on_ready():
 
 # RUN
 if __name__ == "__main__":
-    token = "MTQ0ODY4MzkzNjgxNjU2NjQ0Nw.GlsiFt.QbpXxbS24Je0zvtM9fwDsnNsCVTXE5TMNG-bWY"   # <-- put bot token here
+    token = "MTQ0ODY4MzkzNjgxNjU2NjQ0Nw.GwENVP.w1vy5i5jCvWZBvuLan9SAxCoFuwrZwfuglz7E0"   # <-- put bot token here
     if token.startswith("YOUR") or token.strip() == "":
         print("ERROR: Replace the token variable with your real bot token in the script.")
     else:
