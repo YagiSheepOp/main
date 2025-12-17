@@ -77,14 +77,14 @@ async def send_account(interaction, tier, name):
 
     if key in cooldowns and now - cooldowns[key] < COOLDOWNS[tier]:
         await interaction.response.send_message(
-            "⏳ Cooldown active, wait a bit.",
+            "⏳ Cooldown active. Please wait.",
             ephemeral=True
         )
         return
 
     cooldowns[key] = now
-
     stock = GENS[tier][name]
+
     if not stock:
         await interaction.response.send_message("❌ No stock.", ephemeral=True)
         return
@@ -92,23 +92,35 @@ async def send_account(interaction, tier, name):
     acc = stock.pop(0)
     save_data()
 
-    # 5% luck booster → VIP
+    # 5% VIP luck from Booster
     if tier == "booster" and random.randint(1, 100) <= 5:
-        vip_role = discord.utils.get(
-            interaction.guild.roles, name=ROLES["vip"]
-        )
+        vip_role = discord.utils.get(interaction.guild.roles, name=ROLES["vip"])
         if vip_role:
             await interaction.user.add_roles(vip_role)
 
-    embed = discord.Embed(title="🎁 GCart Delivery", color=0xeb459e)
-    embed.add_field(name="Email", value=f"`{acc['email']}`", inline=False)
-    embed.add_field(name="Password", value=f"`{acc['password']}`", inline=False)
+    embed = discord.Embed(
+        title="🎁 **GCart Delivery**",
+        color=0xff4fd8
+    )
+
+    embed.description = (
+        "# <a:400125purplebook:1447592335012532334> **GCart Delivery** <a:400125purplebook:1447592335012532334>\n\n"
+        "<a:Neysi:1447993564079325267> Your Generated Account <a:Neysi:1447993564079325267>\n\n"
+        "<a:CoolDoge:1387445675360522240> **Email**\n"
+        f"```{acc['email']}```\n"
+        "<a:CoolDoge:1387445675360522240> **Password**\n"
+        f"```{acc['password']}```\n\n"
+        "<a:Warningggg:1433042494471540836> **Must Do Vouch** "
+        "<a:Arrow_White:1396104143088783370>\n"
+        "https://discord.com/channels/1439302910134583580/1449070993195794545"
+    )
 
     await interaction.user.send(embed=embed)
     await interaction.response.send_message(
         "✅ Check your DM!",
         ephemeral=True
     )
+
 
 # ---------- CATEGORY VIEW ----------
 class CategoryView(View):
