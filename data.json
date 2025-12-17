@@ -1,35 +1,26 @@
 {
-  "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
-
-  "roles": {
-    "vip": "VIP",
-    "booster": "Booster"
-  },
-
-  "cooldowns": {
-    "free": 300,
-    "vip": 180,
-    "booster": 120
-  },
-
   "generators": {
-    "mcfa": { "tier": "free", "accounts": [] },
-    "nitro_unchecked": { "tier": "free", "accounts": [] },
-    "mcfa_banned": { "tier": "free", "accounts": [] },
-    "donut_unbanned": { "tier": "free", "accounts": [] },
-
-    "vip_mcfa": { "tier": "vip", "accounts": [] },
-    "mcfa_changable": { "tier": "vip", "accounts": [] },
-    "steam": { "tier": "vip", "accounts": [] },
-    "xbox_random": { "tier": "vip", "accounts": [] },
-    "crunchyroll": { "tier": "vip", "accounts": [] },
-    "jio_hotstar": { "tier": "vip", "accounts": [] },
-    "hypixel_unbanned": { "tier": "vip", "accounts": [] },
-
-    "mcfa_password_changable": { "tier": "booster", "accounts": [] },
-    "gta5": { "tier": "booster", "accounts": [] },
-    "nitro": { "tier": "booster", "accounts": [] },
-    "redeem_code": { "tier": "booster", "accounts": [] },
-    "gamekey": { "tier": "booster", "accounts": [] }
+    "free": {
+      "mcfa": [],
+      "nitro_unchecked": [],
+      "mcfa_banned": [],
+      "donut_unbanned": []
+    },
+    "vip": {
+      "vip_mcfa": [],
+      "mcfa_changable": [],
+      "steam": [],
+      "xbox_random": [],
+      "crunchyroll": [],
+      "jio_hotstar": [],
+      "hypixel_unbanned": []
+    },
+    "booster": {
+      "mcfa_password_changable": [],
+      "gta5": [],
+      "nitro": [],
+      "redeem_code": [],
+      "gamekey": []
+    }
   }
 }
