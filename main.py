@@ -1,36 +1,35 @@
 import discord
 from discord.ext import commands
 from discord.ui import View, Button
-import json
-import random
-import time
+import json, time, random
 
 # ---------- LOAD DATA ----------
 with open("data.json", "r") as f:
     DATA = json.load(f)
 
-REQUIRED_STATUS = DATA["required_status"]
-COOLDOWN = DATA["cooldown_seconds"]
-ROLES = DATA["roles"]
-GENERATORS = DATA["generators"]
+REQUIRED_STATUS = DATA.get("required_status", "")
+COOLDOWN = DATA.get("cooldown_seconds", 60)
+ROLES = DATA.get("roles", {})
+GENERATORS = DATA.get("generators", {})
 
 cooldowns = {}
 
 # ---------- BOT ----------
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!gcart ", intents=intents, help_command=None)
+bot = commands.Bot(
+    command_prefix="!gcart ",
+    intents=intents,
+    help_command=None
+)
 
 # ---------- UTIL ----------
 def is_owner(member: discord.Member):
     if member.guild.owner_id == member.id:
         return True
-    for role in member.roles:
-        if role.name.lower() == "owner":
-            return True
-    return False
+    return any(r.name.lower() == "owner" for r in member.roles)
 
-def has_role(member, role_name):
-    return any(r.name.lower() == role_name.lower() for r in member.roles)
+def has_role(member, role):
+    return any(r.name.lower() == role.lower() for r in member.roles)
 
 def get_status(member):
     for act in member.activities:
@@ -38,11 +37,11 @@ def get_status(member):
             return act.name
     return ""
 
-def cooldown_ok(user_id):
+def cooldown_ok(uid):
     now = time.time()
-    if user_id in cooldowns and now - cooldowns[user_id] < COOLDOWN:
+    if uid in cooldowns and now - cooldowns[uid] < COOLDOWN:
         return False
-    cooldowns[user_id] = now
+    cooldowns[uid] = now
     return True
 
 # ---------- EMBEDS ----------
@@ -58,21 +57,21 @@ def status_embed():
         color=discord.Color.red()
     )
 
-def no_vip_embed():
+def vip_missing():
     return discord.Embed(
         description=(
             "<a:Warning:1450809908013563918> **You Not Have Vip Role**\n"
-            "<a:animatedarrowgreen:1450811653552607296> Buy Vip:\n"
+            "<a:animatedarrowgreen:1450811653552607296> Buy VIP:\n"
             "https://discord.com/channels/1439302910134583580/1447120310963802182"
         ),
         color=discord.Color.orange()
     )
 
-def no_booster_embed():
+def booster_missing():
     return discord.Embed(
         description=(
             "<a:Warning:1450809908013563918> **You Not Have Booster Role**\n"
-            "Boost server to get booster role."
+            "Boost server to get Booster role."
         ),
         color=discord.Color.orange()
     )
@@ -91,8 +90,8 @@ def delivery_embed(gen, email, password, tier):
         color=discord.Color.green()
     )
 
-# ---------- BUTTON VIEWS ----------
-class GeneratorMenu(View):
+# ---------- BUTTON MENU ----------
+class GenMenu(View):
     def __init__(self, author):
         super().__init__(timeout=60)
         self.author = author
@@ -102,18 +101,18 @@ class GeneratorMenu(View):
 
     @discord.ui.button(label="Free Gen", style=discord.ButtonStyle.green)
     async def free(self, interaction, _):
-        await show_generators(interaction, "free")
+        await show(interaction, "free")
 
     @discord.ui.button(label="VIP Gen", style=discord.ButtonStyle.blurple)
     async def vip(self, interaction, _):
-        await show_generators(interaction, "vip")
+        await show(interaction, "vip")
 
     @discord.ui.button(label="Booster Gen", style=discord.ButtonStyle.red)
     async def booster(self, interaction, _):
-        await show_generators(interaction, "booster")
+        await show(interaction, "booster")
 
-# ---------- SHOW GENERATORS ----------
-async def show_generators(interaction, tier):
+# ---------- SHOW GEN ----------
+async def show(interaction, tier):
     member = interaction.user
 
     if not is_owner(member):
@@ -124,15 +123,24 @@ async def show_generators(interaction, tier):
             )
 
         if tier == "vip" and not has_role(member, ROLES["vip"]):
-            return await interaction.response.send_message(embed=no_vip_embed(), ephemeral=True)
+            return await interaction.response.send_message(
+                embed=vip_missing(), ephemeral=True
+            )
 
         if tier == "booster" and not has_role(member, ROLES["booster"]):
-            return await interaction.response.send_message(embed=no_booster_embed(), ephemeral=True)
+            return await interaction.response.send_message(
+                embed=booster_missing(), ephemeral=True
+            )
 
     view = View(timeout=60)
-    for gen in GENERATORS[tier]:
-        view.add_item(Button(label=gen, style=discord.ButtonStyle.secondary,
-                             custom_id=f"{tier}:{gen}"))
+    for g in GENERATORS[tier]:
+        view.add_item(
+            Button(
+                label=g,
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"{tier}:{g}"
+            )
+        )
 
     await interaction.response.send_message(
         embed=discord.Embed(title=f"{tier.upper()} GENERATORS"),
@@ -140,17 +148,17 @@ async def show_generators(interaction, tier):
         ephemeral=True
     )
 
-# ---------- BUTTON HANDLER ----------
+# ---------- INTERACTION ----------
 @bot.event
 async def on_interaction(interaction):
-    if not interaction.type == discord.InteractionType.component:
+    if interaction.type != discord.InteractionType.component:
         return
 
-    custom = interaction.data.get("custom_id")
-    if ":" not in custom:
+    cid = interaction.data.get("custom_id", "")
+    if ":" not in cid:
         return
 
-    tier, gen = custom.split(":")
+    tier, gen = cid.split(":")
 
     if not cooldown_ok(interaction.user.id):
         return await interaction.response.send_message(
@@ -171,19 +179,24 @@ async def on_interaction(interaction):
         embed=delivery_embed(gen, email, password, tier)
     )
 
-    # 5% VIP DROP FOR BOOSTER
     if tier == "booster" and random.randint(1, 100) <= 5:
-        role = discord.utils.get(interaction.guild.roles, name=ROLES["vip"])
+        role = discord.utils.get(
+            interaction.guild.roles, name=ROLES["vip"]
+        )
         if role:
             await interaction.user.add_roles(role)
 
-    await interaction.response.send_message("✅ Check your DM!", ephemeral=True)
+    await interaction.response.send_message(
+        "✅ Check your DM!", ephemeral=True
+    )
 
 # ---------- COMMANDS ----------
 @bot.command()
 async def gen(ctx):
-    view = GeneratorMenu(ctx.author)
-    await ctx.send("🎁 **Select Generator**", view=view)
+    await ctx.send(
+        "🎁 **Select Generator**",
+        view=GenMenu(ctx.author)
+    )
 
 @bot.command()
 async def dm(ctx, user: discord.Member, *, msg):
