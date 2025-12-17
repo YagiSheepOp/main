@@ -1,190 +1,246 @@
 import discord
 from discord.ext import commands
-import os, json, random
+import json
+import os
+import random
 
 TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.presences = True
 
-bot = commands.Bot(
-    command_prefix="!gcart ",
-    intents=intents,
-    help_command=None
-)
+bot = commands.Bot(command_prefix="!gcart ", intents=intents, help_command=None)
 
 DATA_FILE = "data.json"
 
-# ---------- DATA ----------
+# ---------- UTILS ----------
+
 def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {"free": {}, "vip": {}, "booster": {}}
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
-def save_data(d):
+def save_data(data):
     with open(DATA_FILE, "w") as f:
-        json.dump(d, f, indent=4)
+        json.dump(data, f, indent=4)
 
-data = load_data()
+def is_admin(ctx):
+    return ctx.author.guild_permissions.administrator
 
-# ---------- READY ----------
+def has_status(member, phrase):
+    if not member.activities:
+        return False
+    for act in member.activities:
+        if isinstance(act, discord.CustomActivity):
+            if act.name and phrase in act.name:
+                return True
+    return False
+
+# ---------- EVENTS ----------
+
 @bot.event
 async def on_ready():
-    await bot.change_presence(
-        activity=discord.Game(".gg/CNFyBV5VnG Best Gen Server")
-    )
-    print("GCart Ready")
+    print(f"✅ Logged in as {bot.user}")
 
 # ---------- HELP ----------
+
 @bot.command()
 async def help(ctx):
-    await ctx.send(
-        "**📌 GCart Commands**\n\n"
-        "`!gcart gen <name>`\n"
-        "`!gcart stock`\n\n"
-        "**Admin**\n"
-        "`!gcart add <free/vip/booster> <name> <email> <pass>`\n"
-        "`!gcart bulk <type> <name>` (upload .txt)\n"
-        "`!gcart clear <type> <name>`\n"
-        "`!gcart dm @user <msg>`"
-    )
-
-# ---------- DM ----------
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def dm(ctx, member: discord.Member, *, msg):
-    try:
-        await member.send(msg)
-        await ctx.send("✅ DM sent")
-    except:
-        await ctx.send("❌ DM failed")
-
-# ---------- STOCK ----------
-@bot.command()
-async def stock(ctx):
-    text = "**📦 GCart Stock**\n"
-    for t in data:
-        text += f"\n**{t.upper()}**\n"
-        if not data[t]:
-            text += "Empty\n"
-        for k, v in data[t].items():
-            text += f"`{k}` → {len(v)}\n"
-    await ctx.send(text)
-
-# ---------- ADD ----------
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def add(ctx, *args):
-    if len(args) == 3:
-        # auto free gen
-        gtype = "free"
-        name, email, password = args
-    elif len(args) == 4:
-        gtype, name, email, password = args
-        gtype = gtype.lower()
+    if is_admin(ctx):
+        await ctx.send(
+            "**📌 GCart Admin Commands**\n"
+            "```"
+            "!gcart gen <name>\n"
+            "!gcart stock\n"
+            "!gcart create <genname> <free/vip/booster>\n"
+            "!gcart add <free/vip/booster> <genname> <email> <pass>\n"
+            "!gcart bulk <free/vip/booster> <genname> (upload .txt)\n"
+            "!gcart clear <free/vip/booster> <genname>\n"
+            "!gcart dm @user <message>\n"
+            "```"
+        )
     else:
-        return await ctx.send("❌ Usage: `!gcart add [free/vip/booster] <name> <email> <pass>`")
+        await ctx.send(
+            "**📌 GCart Commands**\n"
+            "```"
+            "!gcart gen <name>\n"
+            "!gcart stock\n"
+            "```"
+        )
 
-    name = name.lower()
+# ---------- CREATE GEN ----------
 
-    if gtype not in data:
-        return await ctx.send("❌ Invalid type (free/vip/booster)")
-
-    data[gtype].setdefault(name, [])
-    entry = f"{email}:{password}"
-
-    if entry in data[gtype][name]:
-        return await ctx.send("⚠ Already exists")
-
-    data[gtype][name].append(entry)
-    save_data(data)
-    await ctx.send(f"✅ Added to **{gtype.upper()}** → `{name}`")
-
-
-# ---------- BULK ----------
 @bot.command()
-@commands.has_permissions(administrator=True)
-async def bulk(ctx, gtype, name):
-    if not ctx.message.attachments:
-        return await ctx.send("❌ Upload txt")
+async def create(ctx, genname: str, tier: str):
+    if not is_admin(ctx):
+        return
 
-    gtype = gtype.lower()
-    name = name.lower()
+    tier = tier.lower()
+    if tier not in ["free", "vip", "booster"]:
+        await ctx.send("❌ Invalid tier.")
+        return
 
-    if gtype not in data:
-        return await ctx.send("❌ Invalid type")
+    data = load_data()
+    if genname in data["generators"]:
+        await ctx.send("❌ Generator already exists.")
+        return
 
-    content = (await ctx.message.attachments[0].read()).decode().splitlines()
-    data[gtype].setdefault(name, [])
-
-    added = 0
-    for line in content:
-        if ":" in line and line not in data[gtype][name]:
-            data[gtype][name].append(line)
-            added += 1
+    data["generators"][genname] = {
+        "tier": tier,
+        "accounts": []
+    }
 
     save_data(data)
-    await ctx.send(f"✅ Added {added}")
-
-# ---------- CLEAR ----------
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def clear(ctx, gtype, name):
-    gtype = gtype.lower()
-    name = name.lower()
-
-    if gtype in data and name in data[gtype]:
-        data[gtype][name] = []
-        save_data(data)
-        await ctx.send("🗑 Cleared")
-    else:
-        await ctx.send("❌ Not found")
+    await ctx.send(f"✅ Generator `{genname}` created as `{tier}`.")
 
 # ---------- GEN ----------
+
 @bot.command()
-async def gen(ctx, name):
-    name = name.lower()
-    member = ctx.author
+async def gen(ctx, name: str):
+    data = load_data()
 
-    # Channel-based type
-    gtype = "free"
-    if ctx.channel.name == "vip-gen":
-        if not discord.utils.get(member.roles, name="VIP"):
-            return await ctx.send("❌ VIP role required")
-        gtype = "vip"
+    if name not in data["generators"]:
+        await ctx.send("❌ Invalid generator name.")
+        return
 
-    if ctx.channel.name == "booster-gen":
-        if not discord.utils.get(member.roles, name="Booster"):
-            return await ctx.send("❌ Booster role required")
-        gtype = "booster"
+    gen = data["generators"][name]
 
-    if name not in data[gtype] or not data[gtype][name]:
-        return await ctx.send("❌ Generator not found or out of stock")
+    # Tier checks
+    if gen["tier"] == "vip" and not any(r.name.lower() == "vip" for r in ctx.author.roles):
+        await ctx.send("❌ VIP role required.")
+        return
 
-    account = random.choice(data[gtype][name])
-    data[gtype][name].remove(account)
+    if gen["tier"] == "booster" and not ctx.author.premium_since:
+        await ctx.send("❌ Booster required.")
+        return
+
+    # Status check
+    required = data.get("required_status_phrase")
+    if required and not has_status(ctx.author, required):
+        await ctx.send(f"❌ Set status to: `{required}`")
+        return
+
+    if not gen["accounts"]:
+        await ctx.send("❌ Out of stock.")
+        return
+
+    account = gen["accounts"].pop(0)
     save_data(data)
 
-    email, password = account.split(":", 1)
-
-    msg = (
-        "# <a:400125purplebook:1447592335012532334> **GCart Delivery** <a:400125purplebook:1447592335012532334>\n\n"
-        f"<a:Neysi:1447993564079325267> **{name.upper()} Account** <a:Neysi:1447993564079325267>\n\n"
-        f"<a:Angry_Ping_Happy:1387445548780486816> From **{gtype.upper()} GEN** <a:Angry_Ping_Happy:1387445548780486816>\n\n"
-        "<a:CoolDoge:1387445675360522240> **Email**\n"
-        f"```{email}```\n"
-        "<a:CoolDoge:1387445675360522240> **Password**\n"
-        f"```{password}```\n\n"
-        "<a:Warningggg:1433042494471540836> **Must Do Vouch**\n"
-        "<a:Arrow_White:1396104143088783370> https://discord.com/channels/1439302910134583580/1449070993195794545"
+    await ctx.author.send(
+        f"# <a:400125purplebook:1447592335012532334> **GCart Delivery** <a:400125purplebook:1447592335012532334>\n\n"
+        f"<a:Neysi:1447993564079325267> Your **{name.upper()}** Account Is Here\n\n"
+        f"<a:CoolDoge:1387445675360522240> **Email**\n```{account['email']}```\n"
+        f"<a:CoolDoge:1387445675360522240> **Password**\n```{account['password']}```\n\n"
+        f"<a:Warningggg:1433042494471540836> **Must Do Vouch** → https://discord.gg/CNFyBV5VnG"
     )
 
-    try:
-        await member.send(msg)
-        await ctx.send("📩 Check DM")
-    except:
-        await ctx.send("❌ DM closed")
+    await ctx.send("✅ Check your DM.")
+
+# ---------- STOCK ----------
+
+@bot.command()
+async def stock(ctx):
+    data = load_data()
+    msg = "**📦 GCart Stock**\n"
+
+    for name, gen in data["generators"].items():
+        msg += f"• `{name}` → **{len(gen['accounts'])}**\n"
+
+    await ctx.send(msg)
+
+# ---------- ADD ----------
+
+@bot.command()
+async def add(ctx, tier: str, genname: str, email: str, password: str):
+    if not is_admin(ctx):
+        return
+
+    data = load_data()
+
+    if genname not in data["generators"]:
+        await ctx.send("❌ Generator not found.")
+        return
+
+    if data["generators"][genname]["tier"] != tier.lower():
+        await ctx.send("❌ Tier mismatch.")
+        return
+
+    # Prevent duplicates
+    for acc in data["generators"][genname]["accounts"]:
+        if acc["email"] == email:
+            await ctx.send("❌ Duplicate account.")
+            return
+
+    data["generators"][genname]["accounts"].append({
+        "email": email,
+        "password": password
+    })
+
+    save_data(data)
+    await ctx.send("✅ Account added.")
+
+# ---------- BULK ----------
+
+@bot.command()
+async def bulk(ctx, tier: str, genname: str):
+    if not is_admin(ctx):
+        return
+
+    if not ctx.message.attachments:
+        await ctx.send("❌ Upload a .txt file.")
+        return
+
+    data = load_data()
+    if genname not in data["generators"]:
+        await ctx.send("❌ Generator not found.")
+        return
+
+    file = await ctx.message.attachments[0].read()
+    lines = file.decode().splitlines()
+
+    added = 0
+    for line in lines:
+        if ":" not in line:
+            continue
+        email, password = line.split(":", 1)
+        data["generators"][genname]["accounts"].append({
+            "email": email.strip(),
+            "password": password.strip()
+        })
+        added += 1
+
+    save_data(data)
+    await ctx.send(f"✅ Added {added} accounts.")
+
+# ---------- CLEAR ----------
+
+@bot.command()
+async def clear(ctx, tier: str, genname: str):
+    if not is_admin(ctx):
+        return
+
+    data = load_data()
+    if genname not in data["generators"]:
+        await ctx.send("❌ Generator not found.")
+        return
+
+    data["generators"][genname]["accounts"] = []
+    save_data(data)
+
+    await ctx.send("🧹 Stock cleared.")
+
+# ---------- DM ----------
+
+@bot.command()
+async def dm(ctx, user: discord.Member, *, msg: str):
+    if not is_admin(ctx):
+        return
+
+    await user.send(msg)
+    await ctx.send("✅ DM sent.")
+
+# ---------- RUN ----------
 
 bot.run(TOKEN)
