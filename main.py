@@ -1,190 +1,203 @@
 import discord
 from discord.ext import commands
 from discord.ui import View, Button
-import json, os, random, time
+import json
+import os
+import random
+import asyncio
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
+# ---------------- CONFIG ---------------- #
 
-bot = commands.Bot(command_prefix="!gcart ", intents=intents)
+INTENTS = discord.Intents.default()
+INTENTS.message_content = True
+INTENTS.members = True
+
+bot = commands.Bot(
+    command_prefix="!gcart ",
+    intents=INTENTS,
+    help_command=None
+)
 
 DATA_FILE = "data.json"
-with open(DATA_FILE, "r") as f:
-    DATA = json.load(f)
 
-REQUIRED_STATUS = DATA["required_status"]
-COOLDOWN = DATA["cooldown_seconds"]
-LAST_USED = {}
+# ---------------- LOAD DATA ---------------- #
 
-def save():
-    with open(DATA_FILE, "w") as f:
-        json.dump(DATA, f, indent=2)
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {"generators": {}}
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def is_owner(ctx):
-    return ctx.guild.owner_id == ctx.author.id
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
 
-def has_status(member):
-    if not member.activities:
-        return False
-    for a in member.activities:
-        if isinstance(a, discord.CustomActivity) and a.name:
-            if REQUIRED_STATUS in a.name:
-                return True
-    return False
+DATA = load_data()
 
-def cooldown_ok(user):
-    now = time.time()
-    last = LAST_USED.get(user.id, 0)
-    if now - last < COOLDOWN:
-        return False, int(COOLDOWN - (now - last))
-    LAST_USED[user.id] = now
-    return True, 0
-
-def make_embed(title, desc):
-    return discord.Embed(
-        title=title,
-        description=desc,
-        color=0x7d5fff
-    )
+# ---------------- READY ---------------- #
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
+    print(f"✅ Logged in as {bot.user}")
 
-# ---------------- GEN MENU ----------------
+# ---------------- GCART GROUP ---------------- #
 
-@bot.command()
+@bot.group(invoke_without_command=True)
+async def gcart(ctx):
+    embed = discord.Embed(
+        title="🎁 GCart Generator",
+        description="Use `!gcart help` to see commands",
+        color=0x2ecc71
+    )
+    await ctx.send(embed=embed)
+
+# ---------------- HELP ---------------- #
+
+@gcart.command()
+async def help(ctx):
+    embed = discord.Embed(
+        title="📌 GCart Commands",
+        color=0x5865F2
+    )
+
+    embed.add_field(
+        name="👤 User Commands",
+        value=(
+            "`!gcart gen` – Open generator menu\n"
+            "`!gcart stock` – View available stock"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛠 Admin Commands",
+        value=(
+            "`!gcart create <name>`\n"
+            "`!gcart add <name> <email> <pass>`\n"
+            "`!gcart clear <name>`"
+        ),
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+
+# ---------------- GEN MENU ---------------- #
+
+class GenView(View):
+    def __init__(self, user):
+        super().__init__(timeout=60)
+        self.user = user
+
+    async def interaction_check(self, interaction):
+        return interaction.user == self.user
+
+    @discord.ui.button(label="Free Gen", style=discord.ButtonStyle.success)
+    async def free(self, interaction, button):
+        await interaction.response.send_message(
+            "✅ Free generators available:\n`mcfa`, `nitro_unchecked`",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="VIP Gen", style=discord.ButtonStyle.primary)
+    async def vip(self, interaction, button):
+        await interaction.response.send_message(
+            "💎 VIP generators require VIP role",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="Booster Gen", style=discord.ButtonStyle.danger)
+    async def booster(self, interaction, button):
+        await interaction.response.send_message(
+            "🚀 Booster generators require Booster role",
+            ephemeral=True
+        )
+
+@gcart.command()
 async def gen(ctx):
-    view = View(timeout=30)
-
-    async def free_btn(inter):
-        await handle_gen(inter, "free")
-
-    async def vip_btn(inter):
-        await handle_gen(inter, "vip")
-
-    async def booster_btn(inter):
-        await handle_gen(inter, "booster")
-
-    view.add_item(Button(label="Free Gen", style=discord.ButtonStyle.green, callback=free_btn))
-    view.add_item(Button(label="VIP Gen", style=discord.ButtonStyle.blurple, callback=vip_btn))
-    view.add_item(Button(label="Booster Gen", style=discord.ButtonStyle.red, callback=booster_btn))
-
-    await ctx.send(
-        embed=make_embed("🎁 Select Generator", "Choose a generator below"),
-        view=view,
-        delete_after=30
+    embed = discord.Embed(
+        title="🎁 Select Generator",
+        description="Choose a generator type below",
+        color=0x2ecc71
     )
+    await ctx.send(embed=embed, view=GenView(ctx.author))
 
-# ---------------- CORE GEN LOGIC ----------------
+# ---------------- STOCK ---------------- #
 
-async def handle_gen(inter, tier):
-    member = inter.user
-
-    if not is_owner(inter):
-        ok, wait = cooldown_ok(member)
-        if not ok:
-            return await inter.response.send_message(
-                f"⏳ Cooldown: wait `{wait}s`", ephemeral=True
-            )
-
-        if not has_status(member):
-            return await inter.response.send_message(
-                embed=make_embed(
-                    "❌ Status Missing",
-                    "<a:animatedarrowgreen:1450811653552607296> Use this status:\n"
-                    "```.gg/CNFyBV5VnG Best Gen & Best Server ✅```"
-                ),
-                ephemeral=True
-            )
-
-        if tier == "vip" and DATA["roles"]["vip"] not in [r.name for r in member.roles]:
-            return await inter.response.send_message(
-                embed=make_embed(
-                    "⚠️ No VIP Role",
-                    "<a:Warning:1450809908013563918> You do not have VIP\n"
-                    "<a:animatedarrowgreen:1450811653552607296> Buy VIP from store"
-                ),
-                ephemeral=True
-            )
-
-        if tier == "booster" and DATA["roles"]["booster"] not in [r.name for r in member.roles]:
-            return await inter.response.send_message(
-                embed=make_embed(
-                    "⚠️ No Booster Role",
-                    "<a:Warning:1450809908013563918> Boost server to unlock Booster Gen"
-                ),
-                ephemeral=True
-            )
-
-    gens = DATA["generators"][tier]
-    name = random.choice(list(gens.keys()))
-    if not gens[name]:
-        return await inter.response.send_message("❌ Out of stock.", ephemeral=True)
-
-    acc = gens[name].pop(0)
-    save()
-
-    dm = make_embed(
-        "<a:400125purplebook:1447592335012532334> **GCart Delivery**",
-        f"<a:Neysi:1447993564079325267> **Your {name.upper()} Account**\n\n"
-        f"📧 Email:\n```{acc['email']}```\n"
-        f"🔑 Password:\n```{acc['password']}```\n\n"
-        "<a:Warningggg:1433042494471540836> **Must Do Vouch**"
-    )
-
-    await member.send(embed=dm)
-    await inter.response.send_message("✅ Check your DM!", ephemeral=True)
-
-    if tier == "booster" and random.randint(1, 100) <= 5:
-        vip_role = discord.utils.get(inter.guild.roles, name=DATA["roles"]["vip"])
-        if vip_role:
-            await member.add_roles(vip_role)
-
-# ---------------- ADMIN ----------------
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def add(ctx, tier, name, email, password):
-    DATA["generators"][tier][name].append({"email": email, "password": password})
-    save()
-    await ctx.send("✅ Account added.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def bulk(ctx, tier, name):
-    if not ctx.message.attachments:
-        return await ctx.send("Upload .txt file")
-
-    file = await ctx.message.attachments[0].read()
-    lines = file.decode().splitlines()
-
-    for l in lines:
-        if ":" in l:
-            e, p = l.split(":", 1)
-            DATA["generators"][tier][name].append({"email": e, "password": p})
-
-    save()
-    await ctx.send("✅ Bulk added.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def clear(ctx, tier, name):
-    DATA["generators"][tier][name].clear()
-    save()
-    await ctx.send("🗑 Cleared.")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
+@gcart.command()
 async def stock(ctx):
-    text = ""
-    for t, g in DATA["generators"].items():
-        text += f"\n**{t.upper()}**\n"
-        for n, a in g.items():
-            text += f"{n}: {len(a)}\n"
-    await ctx.send(f"```{text}```")
+    data = load_data()
+    gens = data.get("generators", {})
 
-# ---------------- RUN ----------------
+    if not gens:
+        await ctx.send("❌ No generators available.")
+        return
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+    desc = ""
+    for name, gen in gens.items():
+        desc += f"**{name}** — `{len(gen['accounts'])}` accounts\n"
+
+    embed = discord.Embed(
+        title="📦 Available Stock",
+        description=desc,
+        color=0x3498db
+    )
+    await ctx.send(embed=embed)
+
+# ---------------- CREATE GEN ---------------- #
+
+@gcart.command()
+@commands.has_permissions(administrator=True)
+async def create(ctx, name):
+    data = load_data()
+
+    if name in data["generators"]:
+        await ctx.send("❌ Generator already exists.")
+        return
+
+    data["generators"][name] = {"accounts": []}
+    save_data(data)
+
+    await ctx.send(f"✅ Generator `{name}` created.")
+
+# ---------------- ADD ACCOUNT ---------------- #
+
+@gcart.command()
+@commands.has_permissions(administrator=True)
+async def add(ctx, name, email, password):
+    data = load_data()
+
+    if name not in data["generators"]:
+        await ctx.send("❌ Generator not found.")
+        return
+
+    data["generators"][name]["accounts"].append({
+        "email": email,
+        "password": password
+    })
+
+    save_data(data)
+    await ctx.send(f"✅ Account added to `{name}`.")
+
+# ---------------- CLEAR ---------------- #
+
+@gcart.command()
+@commands.has_permissions(administrator=True)
+async def clear(ctx, name):
+    data = load_data()
+
+    if name not in data["generators"]:
+        await ctx.send("❌ Generator not found.")
+        return
+
+    data["generators"][name]["accounts"] = []
+    save_data(data)
+
+    await ctx.send(f"🧹 Cleared `{name}` stock.")
+
+# ---------------- RUN ---------------- #
+
+TOKEN = os.getenv("DISCORD_TOKEN")
+if not TOKEN:
+    raise RuntimeError("❌ DISCORD_TOKEN not set")
+
+bot.run(TOKEN)
