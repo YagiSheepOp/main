@@ -1,13 +1,14 @@
 {
   "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
 
-  "cooldowns": {
-    "free": 300,
-    "vip": 180,
-    "booster": 120
+  "roles": {
+    "vip": "VIP",
+    "booster": "Booster"
   },
 
-  "vip_luck_percent": 5,
+  "cooldowns": {
+    "free": 300
+  },
 
   "generators": {
     "mcfa": {
