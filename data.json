@@ -7,12 +7,22 @@
   },
 
   "cooldowns": {
-    "free": 300
+    "free": 300,
+    "vip": 180,
+    "booster": 120
   },
 
   "generators": {
     "mcfa": {
       "tier": "free",
+      "accounts": []
+    },
+    "vip_mcfa": {
+      "tier": "vip",
+      "accounts": []
+    },
+    "booster_mcfa": {
+      "tier": "booster",
       "accounts": []
     }
   }
