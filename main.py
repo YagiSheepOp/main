@@ -229,7 +229,7 @@ async def gen(ctx, genname: str):
             f"You Generated Account From **{data['generators'][genname]['tier'].upper()} GEN** "
             f"<:MonkaS_ping:1450810680016896085>"
         ),
-        color=0x9b59b6
+        color=0xffff00
     )
 
     embed.add_field(
