@@ -13,17 +13,23 @@
   },
 
   "generators": {
-    "mcfa": {
-      "tier": "free",
-      "accounts": []
-    },
-    "vip_mcfa": {
-      "tier": "vip",
-      "accounts": []
-    },
-    "booster_mcfa": {
-      "tier": "booster",
-      "accounts": []
-    }
+    "mcfa": { "tier": "free", "accounts": [] },
+    "nitro_unchecked": { "tier": "free", "accounts": [] },
+    "mcfa_banned": { "tier": "free", "accounts": [] },
+    "donut_unbanned": { "tier": "free", "accounts": [] },
+
+    "vip_mcfa": { "tier": "vip", "accounts": [] },
+    "mcfa_changable": { "tier": "vip", "accounts": [] },
+    "steam": { "tier": "vip", "accounts": [] },
+    "xbox_random": { "tier": "vip", "accounts": [] },
+    "crunchyroll": { "tier": "vip", "accounts": [] },
+    "jio_hotstar": { "tier": "vip", "accounts": [] },
+    "hypixel_unbanned": { "tier": "vip", "accounts": [] },
+
+    "mcfa_password_changable": { "tier": "booster", "accounts": [] },
+    "gta5": { "tier": "booster", "accounts": [] },
+    "nitro": { "tier": "booster", "accounts": [] },
+    "redeem_code": { "tier": "booster", "accounts": [] },
+    "gamekey": { "tier": "booster", "accounts": [] }
   }
 }
