@@ -1,6 +1,12 @@
 {
   "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
 
+  "cooldowns": {
+    "free": 60,
+    "vip": 30,
+    "booster": 20
+  },
+
   "roles": {
     "vip": "VIP",
     "booster": "Booster"
