@@ -76,12 +76,21 @@ async def stock(ctx):
 # ---------- ADD ----------
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def add(ctx, gtype, name, email, password):
-    gtype = gtype.lower()
+async def add(ctx, *args):
+    if len(args) == 3:
+        # auto free gen
+        gtype = "free"
+        name, email, password = args
+    elif len(args) == 4:
+        gtype, name, email, password = args
+        gtype = gtype.lower()
+    else:
+        return await ctx.send("❌ Usage: `!gcart add [free/vip/booster] <name> <email> <pass>`")
+
     name = name.lower()
 
     if gtype not in data:
-        return await ctx.send("❌ Invalid type")
+        return await ctx.send("❌ Invalid type (free/vip/booster)")
 
     data[gtype].setdefault(name, [])
     entry = f"{email}:{password}"
@@ -91,7 +100,8 @@ async def add(ctx, gtype, name, email, password):
 
     data[gtype][name].append(entry)
     save_data(data)
-    await ctx.send("✅ Added")
+    await ctx.send(f"✅ Added to **{gtype.upper()}** → `{name}`")
+
 
 # ---------- BULK ----------
 @bot.command()
