@@ -1,4 +1,23 @@
 {
-  "required_status_phrase": ".gg/CNFyBV5VnG Best Gen Server",
-  "generators": {}
+  "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
+  "roles": {
+    "vip": "VIP",
+    "booster": "Booster"
+  },
+  "stock": {
+    "free": {
+      "mcfa": [
+        {"email": "test@gmail.com", "password": "1234"}
+      ],
+      "nitro_unchecked": []
+    },
+    "vip": {
+      "steam": [],
+      "mcfa": []
+    },
+    "booster": {
+      "gta5": [],
+      "gamekey": []
+    }
+  }
 }
