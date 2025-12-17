@@ -1,4 +1,11 @@
 {
+  "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
+
+  "roles": {
+    "vip": "VIP",
+    "booster": "Booster"
+  },
+
   "generators": {
     "free": {
       "mcfa": [],
@@ -7,7 +14,7 @@
       "donut_unbanned": []
     },
     "vip": {
-      "vip_mcfa": [],
+      "mcfa": [],
       "mcfa_changable": [],
       "steam": [],
       "xbox_random": [],
