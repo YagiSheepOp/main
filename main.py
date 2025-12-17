@@ -217,20 +217,50 @@ async def gen(ctx, genname: str):
     if not data["generators"][genname]["accounts"]:
         return await ctx.send("❌ Out of stock.")
 
-    acc = data["generators"][genname]["accounts"].pop(0)
+    account = data["generators"][genname]["accounts"].pop(0)
     save_data(data)
 
+    embed = discord.Embed(
+        title="<a:400125purplebook:1447592335012532334> GCart Delivery <a:400125purplebook:1447592335012532334>",
+        description=(
+            f"<a:Neysi:1447993564079325267> **Your `{genname.upper()}` Account Is Here** "
+            f"<a:Neysi:1447993564079325267>\n\n"
+            f"<a:Angry_Ping_Happy:1387445548780486816> "
+            f"You Generated Account From **{data['generators'][genname]['tier'].upper()} GEN** "
+            f"<a:Angry_Ping_Happy:1387445548780486816>"
+        ),
+        color=0x9b59b6
+    )
+
+    embed.add_field(
+        name="<a:CoolDoge:1387445675360522240> Email",
+        value=f"```{account['email']}```",
+        inline=False
+    )
+
+    embed.add_field(
+        name="<a:CoolDoge:1387445675360522240> Password",
+        value=f"```{account['password']}```",
+        inline=False
+    )
+
+    embed.add_field(
+        name="<a:Warningggg:1433042494471540836> Must Do Vouch",
+        value=(
+            "<a:Arrow_White:1396104143088783370> "
+            "https://discord.com/channels/1439302910134583580/1449070993195794545"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="GCart • Best Gen Server")
+
     try:
-        await ctx.author.send(
-            f"# <a:400125purplebook:1447592335012532334> **GCart Delivery** <a:400125purplebook:1447592335012532334>\n\n"
-            f"<a:Neysi:1447993564079325267> Your `{genname}` Account <a:Neysi:1447993564079325267>\n\n"
-            f"**Email**\n```{acc['email']}```\n"
-            f"**Password**\n```{acc['password']}```\n\n"
-            f"<a:Warningggg:1433042494471540836> **Must Do Vouch** → https://discord.gg/CNFyBV5VnG"
-        )
-        await ctx.send("✅ Check your DM.")
-    except:
-        await ctx.send("❌ DMs closed.")
+        await ctx.author.send(embed=embed)
+        await ctx.send("✅ **Check your DM!**")
+    except discord.Forbidden:
+        await ctx.send("❌ **Your DMs are closed.**")
+
 
 
 # -------------------- DM COMMAND --------------------
