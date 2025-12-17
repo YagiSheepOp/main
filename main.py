@@ -223,31 +223,31 @@ async def gen(ctx, genname: str):
     embed = discord.Embed(
         title="<a:400125purplebook:1447592335012532334> GCart Delivery <a:400125purplebook:1447592335012532334>",
         description=(
-            f"<a:Neysi:1447993564079325267> **Your `{genname.upper()}` Account Is Here** "
-            f"<a:Neysi:1447993564079325267>\n\n"
-            f"<a:Angry_Ping_Happy:1387445548780486816> "
+            f"<a:GUPE_FIRE:1450810302982783046> **Your `{genname.upper()}` Account Is Here** "
+            f"<a:GUPE_FIRE:1450810302982783046>\n\n"
+            f"<:MonkaS_ping:1450810680016896085> "
             f"You Generated Account From **{data['generators'][genname]['tier'].upper()} GEN** "
-            f"<a:Angry_Ping_Happy:1387445548780486816>"
+            f"<:MonkaS_ping:1450810680016896085>"
         ),
         color=0x9b59b6
     )
 
     embed.add_field(
-        name="<a:CoolDoge:1387445675360522240> Email",
+        name="<a:dogdance:1450810869184462949> Email",
         value=f"```{account['email']}```",
         inline=False
     )
 
     embed.add_field(
-        name="<a:CoolDoge:1387445675360522240> Password",
+        name="<a:dogdance:1450810869184462949> Password",
         value=f"```{account['password']}```",
         inline=False
     )
 
     embed.add_field(
-        name="<a:Warningggg:1433042494471540836> Must Do Vouch",
+        name="<a:Warning:1450809908013563918> Must Do Vouch",
         value=(
-            "<a:Arrow_White:1396104143088783370> "
+            "<a:animatedarrowgreen:1450811653552607296> "
             "https://discord.com/channels/1439302910134583580/1449070993195794545"
         ),
         inline=False
