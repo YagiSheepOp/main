@@ -221,9 +221,9 @@ async def gen(ctx, genname: str):
     save_data(data)
 
     embed = discord.Embed(
-        title="<a:400125purplebook:1447592335012532334> GCart Delivery <a:400125purplebook:1447592335012532334>",
+        title="# <a:400125purplebook:1447592335012532334> GCart Delivery <a:400125purplebook:1447592335012532334>",
         description=(
-            f"<a:GUPE_FIRE:1450810302982783046> **Your `{genname.upper()}` Account Is Here** "
+            f"# <a:GUPE_FIRE:1450810302982783046> **Your `{genname.upper()}` Account Is Here** "
             f"<a:GUPE_FIRE:1450810302982783046>\n\n"
             f"<:MonkaS_ping:1450810680016896085> "
             f"You Generated Account From **{data['generators'][genname]['tier'].upper()} GEN** "
