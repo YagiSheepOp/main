@@ -1,34 +1,37 @@
 {
+  "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server",
+  "cooldown_seconds": 60,
+
   "roles": {
     "vip": "VIP",
     "booster": "Booster"
   },
 
-  "stock": {
+  "generators": {
     "free": {
       "mcfa": [],
       "nitro_unchecked": [],
       "mcfa_banned": [],
-      "donut_unbanned": []
+      "hypixel_unbanned": []
     },
 
     "vip": {
       "mcfa": [],
-      "mcfa_changable": [],
+      "mcfa_unbanned": [],
+      "donut_unbanned": [],
       "steam": [],
-      "xbox_random": [],
-      "crunchyroll": [],
-      "jio_hotstar": [],
-      "hypixel_unbanned": []
+      "game_key": [],
+      "gta5": [],
+      "xbox": []
     },
 
     "booster": {
-      "mcfa_password_changable": [],
+      "mcfa_password_changeable": [],
       "gta5": [],
       "nitro": [],
       "redeem_code": [],
-      "gamekey": [],
-      "vip_luckydraw": []
+      "game_key": [],
+      "vip_luck": []
     }
   }
 }
