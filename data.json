@@ -1,27 +1,20 @@
 {
-  "required_status": ".gg/cnfybv5vng best gen & best server",
+  "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
+  "roles": {
+    "vip": 1234567890123,
+    "booster": 1234567890123
+  },
   "stock": {
     "free": {
-      "mcfa": [],
-      "nitro_unchecked": [],
-      "mcfa_banned": [],
-      "donut_unbanned": []
+      "mcfa": [
+        {"email": "test@gmail.com", "password": "123"}
+      ]
     },
     "vip": {
-      "mcfa": [],
-      "mcfa_changable": [],
-      "steam": [],
-      "xbox_random": [],
-      "crunchyroll": [],
-      "jio_hotstar": [],
-      "hypixel_unbanned": []
+      "steam": []
     },
     "booster": {
-      "mcfa_password_changable": [],
-      "gta5": [],
-      "nitro": [],
-      "redeem_code": [],
-      "gamekey": []
+      "gta5": []
     }
   }
 }
