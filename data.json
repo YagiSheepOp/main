@@ -1,20 +1,12 @@
 {
   "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
   "roles": {
-    "vip": 1234567890123,
-    "booster": 1234567890123
+    "vip": 0,
+    "booster": 0
   },
   "stock": {
-    "free": {
-      "mcfa": [
-        {"email": "test@gmail.com", "password": "123"}
-      ]
-    },
-    "vip": {
-      "steam": []
-    },
-    "booster": {
-      "gta5": []
-    }
+    "free": [],
+    "vip": [],
+    "booster": []
   }
 }
