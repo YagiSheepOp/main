@@ -1,231 +1,206 @@
 import discord
 from discord.ext import commands
-from discord.ui import View, Button
+from discord.ui import Button, View
 import json
+import random
 import os
 
-# --------------------------------------------
-# LOAD DATA
-# --------------------------------------------
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+intents.presences = True
+
+bot = commands.Bot(command_prefix="!gcart ", intents=intents)
+
 with open("data.json", "r") as f:
     DATA = json.load(f)
 
+REQUIRED_STATUS = DATA["required_status"]
+
 FREE_STOCK = DATA["stock"]["free"]
 VIP_STOCK = DATA["stock"]["vip"]
-BOOSTER_STOCK = DATA["stock"]["booster"]
+BOOST_STOCK = DATA["stock"]["booster"]
 
-REQUIRED_STATUS = DATA["required_status"]
 VIP_ROLE_ID = DATA["roles"]["vip"]
 BOOSTER_ROLE_ID = DATA["roles"]["booster"]
 
-TOKEN = os.getenv("DISCORD_TOKEN")
 
-# --------------------------------------------
-# BOT SETUP
-# --------------------------------------------
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(
-    command_prefix="!gcart ",
-    intents=intents,
-    help_command=None
-)
+# -------------------------------------------------
+# STATUS CHECK FIX
+# -------------------------------------------------
+def has_required_status(user, required_text):
+    try:
+        if not user.activities:
+            return False
+        for activity in user.activities:
+            if hasattr(activity, "state") and activity.state:
+                if required_text.lower() in activity.state.lower():
+                    return True
+    except:
+        pass
+    return False
 
-# --------------------------------------------
-# STARTUP
-# --------------------------------------------
-@bot.event
-async def on_ready():
-    print(f"Bot online as {bot.user}")
 
-# --------------------------------------------
+# -------------------------------------------------
 # HELP COMMAND
-# --------------------------------------------
+# -------------------------------------------------
 @bot.command()
 async def help(ctx):
     embed = discord.Embed(
-        color=discord.Color.blue(),
-        title="📘 GCart Help"
+        title="📌 GCart Help",
+        color=discord.Color.blue()
     )
-
     embed.add_field(
         name="User Commands",
-        value="`!gcart gen` — Generate account\n"
-              "`!gcart stock` — View stock"
+        value="`!gcart gen` → Generate an account\n`!gcart stock` → View stock",
+        inline=False
     )
-
     embed.add_field(
         name="Admin Commands",
-        value="`!gcart add <type> <email> <pass>`\n"
-              "`!gcart clear <type>`"
+        value="`!gcart add <gen> <email> <password>`\n`!gcart bulk <gen> <file>`\n`!gcart clear <gen>`",
+        inline=False
+    )
+    await ctx.send(embed=embed)
+
+
+# -------------------------------------------------
+# GEN MENU
+# -------------------------------------------------
+@bot.command()
+async def gen(ctx):
+
+    # Buttons
+    free_btn = Button(label="Free Gen", style=discord.ButtonStyle.success)
+    vip_btn = Button(label="VIP Gen", style=discord.ButtonStyle.primary)
+    boost_btn = Button(label="Booster Gen", style=discord.ButtonStyle.danger)
+
+    async def free_callback(interaction):
+        if interaction.user != ctx.author:
+            return await interaction.response.send_message(
+                "❌ Only the requester can use this.", ephemeral=True
+            )
+
+        if not has_required_status(interaction.user, REQUIRED_STATUS):
+            embed = discord.Embed(
+                title="❌ Status Required",
+                description=f"Use This Status:\n```\n{REQUIRED_STATUS}\n```",
+                color=discord.Color.red()
+            )
+            return await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        if len(FREE_STOCK) == 0:
+            return await interaction.response.send_message("❌ No stock available.", ephemeral=True)
+
+        account = FREE_STOCK.pop(0)
+        with open("data.json", "w") as f:
+            json.dump(DATA, f, indent=4)
+
+        email, password = account.split(":")
+
+        embed = discord.Embed(
+            title="🎁 GCart Delivery",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Email", value=f"`{email}`", inline=False)
+        embed.add_field(name="Password", value=f"`{password}`", inline=False)
+
+        await interaction.user.send(embed=embed)
+        await interaction.response.send_message("📩 Delivered in DM!", ephemeral=True)
+
+    async def vip_callback(interaction):
+        role = interaction.user.get_role(VIP_ROLE_ID)
+
+        if not role:
+            return await interaction.response.send_message(
+                "❌ You do not have VIP role!", ephemeral=True
+            )
+
+        if len(VIP_STOCK) == 0:
+            return await interaction.response.send_message("❌ No VIP stock available.", ephemeral=True)
+
+        account = VIP_STOCK.pop(0)
+        with open("data.json", "w") as f:
+            json.dump(DATA, f, indent=4)
+
+        email, password = account.split(":")
+
+        embed = discord.Embed(
+            title="💎 VIP Delivery",
+            color=discord.Color.gold()
+        )
+        embed.add_field(name="Email", value=f"`{email}`", inline=False)
+        embed.add_field(name="Password", value=f"`{password}`", inline=False)
+
+        await interaction.user.send(embed=embed)
+        await interaction.response.send_message("📩 VIP Delivery in DM!", ephemeral=True)
+
+    async def boost_callback(interaction):
+        role = interaction.user.get_role(BOOSTER_ROLE_ID)
+
+        if not role:
+            return await interaction.response.send_message(
+                "❌ You are not a booster!", ephemeral=True
+            )
+
+        if len(BOOST_STOCK) == 0:
+            return await interaction.response.send_message("❌ No Booster stock available.", ephemeral=True)
+
+        account = BOOST_STOCK.pop(0)
+        with open("data.json", "w") as f:
+            json.dump(DATA, f, indent=4)
+
+        email, password = account.split(":")
+
+        embed = discord.Embed(
+            title="🚀 Booster Delivery",
+            color=discord.Color.purple()
+        )
+        embed.add_field(name="Email", value=f"`{email}`", inline=False)
+        embed.add_field(name="Password", value=f"`{password}`", inline=False)
+
+        await interaction.user.send(embed=embed)
+        await interaction.response.send_message("📩 Booster Delivery in DM!", ephemeral=True)
+
+    free_btn.callback = free_callback
+    vip_btn.callback = vip_callback
+    boost_btn.callback = boost_callback
+
+    view = View()
+    view.add_item(free_btn)
+    view.add_item(vip_btn)
+    view.add_item(boost_btn)
+
+    embed = discord.Embed(
+        title="🎁 Select Generator",
+        color=discord.Color.blue()
     )
 
-    await ctx.reply(embed=embed)
+    await ctx.send(embed=embed, view=view)
 
-# --------------------------------------------
-# STOCK
-# --------------------------------------------
+
+# -------------------------------------------------
+# STOCK CHECK
+# -------------------------------------------------
 @bot.command()
 async def stock(ctx):
-    def format_stock(section):
-        lines = []
-        for key, accounts in section.items():
-            lines.append(f"**{key}** → `{len(accounts)}`")
-        return "\n".join(lines)
-
     embed = discord.Embed(
         title="📦 Stock",
         color=discord.Color.orange()
     )
 
-    embed.add_field(name="FREE", value=format_stock(FREE_STOCK), inline=False)
-    embed.add_field(name="VIP", value=format_stock(VIP_STOCK), inline=False)
-    embed.add_field(name="BOOSTER", value=format_stock(BOOSTER_STOCK), inline=False)
+    embed.add_field(name="Free", value=len(FREE_STOCK), inline=False)
+    embed.add_field(name="VIP", value=len(VIP_STOCK), inline=False)
+    embed.add_field(name="Booster", value=len(BOOST_STOCK), inline=False)
 
-    await ctx.reply(embed=embed)
+    await ctx.send(embed=embed)
 
-# --------------------------------------------
-# GEN — MAIN MENU
-# --------------------------------------------
-@bot.command()
-async def gen(ctx):
 
-    class GenMenu(View):
-        def __init__(self):
-            super().__init__(timeout=60)
+# -------------------------------------------------
+# BOT READY
+# -------------------------------------------------
+@bot.event
+async def on_ready():
+    print(f"Bot online as {bot.user}")
 
-        @discord.ui.button(label="Free Gen", style=discord.ButtonStyle.success)
-        async def free(self, interaction, button):
-            await handle_free(interaction)
 
-        @discord.ui.button(label="VIP Gen", style=discord.ButtonStyle.primary)
-        async def vip(self, interaction, button):
-            await handle_vip(interaction)
-
-        @discord.ui.button(label="Booster Gen", style=discord.ButtonStyle.danger)
-        async def booster(self, interaction, button):
-            await handle_booster(interaction)
-
-    embed = discord.Embed(
-        title="🎁 Select Generator",
-        color=discord.Color.yellow()
-    )
-
-    await ctx.reply(embed=embed, view=GenMenu())
-
-# --------------------------------------------
-# STATUS CHECK
-# --------------------------------------------
-async def check_status(user: discord.Member):
-    status_text = str(user.activity) if user.activity else ""
-    return REQUIRED_STATUS.lower() in status_text.lower()
-
-# --------------------------------------------
-# FREE GEN HANDLER
-# --------------------------------------------
-async def handle_free(interaction):
-
-    member = interaction.user
-
-    if not await check_status(member):
-        embed = discord.Embed(
-            title="❌ Status Required",
-            description=f"Use This Status:\n```\n{REQUIRED_STATUS}\n```",
-            color=discord.Color.red()
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-        return
-
-    # choose category
-    gen_type = list(FREE_STOCK.keys())[0]
-    accounts = FREE_STOCK[gen_type]
-
-    if len(accounts) == 0:
-        await interaction.response.send_message("❌ No stock.", ephemeral=True)
-        return
-
-    account = accounts.pop()
-
-    # DM delivery
-    dm = await member.create_dm()
-    embed = discord.Embed(
-        title="🎁 GCart Delivery",
-        color=discord.Color.green()
-    )
-    embed.add_field(name="Email", value=f"```{account['email']}```", inline=False)
-    embed.add_field(name="Password", value=f"```{account['password']}```", inline=False)
-    await dm.send(embed=embed)
-
-    save_data()
-
-    await interaction.response.send_message("📩 Check your DM!", ephemeral=True)
-
-# --------------------------------------------
-# VIP
-# --------------------------------------------
-async def handle_vip(interaction):
-
-    member = interaction.user
-    role = discord.utils.get(member.guild.roles, id=VIP_ROLE_ID)
-
-    if role not in member.roles:
-        await interaction.response.send_message("❌ VIP role required.", ephemeral=True)
-        return
-
-    for gen_type, accounts in VIP_STOCK.items():
-        if len(accounts) > 0:
-            acc = accounts.pop()
-            dm = await member.create_dm()
-            embed = discord.Embed(
-                title="🎁 VIP Delivery",
-                color=discord.Color.gold()
-            )
-            embed.add_field(name="Email", value=f"```{acc['email']}```", inline=False)
-            embed.add_field(name="Password", value=f"```{acc['password']}```", inline=False)
-            await dm.send(embed=embed)
-            save_data()
-            await interaction.response.send_message("📩 DM sent!", ephemeral=True)
-            return
-
-    await interaction.response.send_message("❌ VIP stock empty.", ephemeral=True)
-
-# --------------------------------------------
-# BOOSTER
-# --------------------------------------------
-async def handle_booster(interaction):
-
-    member = interaction.user
-    role = discord.utils.get(member.guild.roles, id=BOOSTER_ROLE_ID)
-
-    if role not in member.roles:
-        await interaction.response.send_message("❌ Booster role required.", ephemeral=True)
-        return
-
-    for gen_type, accounts in BOOSTER_STOCK.items():
-        if len(accounts) > 0:
-            acc = accounts.pop()
-            dm = await member.create_dm()
-            embed = discord.Embed(
-                title="🎁 Booster Delivery",
-                color=discord.Color.purple()
-            )
-            embed.add_field(name="Email", value=f"```{acc['email']}```", inline=False)
-            embed.add_field(name="Password", value=f"```{acc['password']}```", inline=False)
-            await dm.send(embed=embed)
-            save_data()
-            await interaction.response.send_message("📩 DM sent!", ephemeral=True)
-            return
-
-    await interaction.response.send_message("❌ Booster stock empty.", ephemeral=True)
-
-# --------------------------------------------
-# SAVE DATA
-# --------------------------------------------
-def save_data():
-    with open("data.json", "w") as f:
-        json.dump(DATA, f, indent=4)
-
-# --------------------------------------------
-# RUN BOT
-# --------------------------------------------
-bot.run(TOKEN)
+bot.run(os.getenv("DISCORD_TOKEN"))
