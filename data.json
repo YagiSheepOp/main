@@ -1,12 +1,14 @@
 {
-  "vip_role_id": 000000000000,
-  "booster_role_id": 000000000000,
-
+  "vip_role_id": 0,
+  "booster_role_id": 0,
   "required_status": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
 
   "stock": {
     "free": {
-      "mcfa": ["email:pass"],
+      "mcfa": [
+        "email1:pass1",
+        "email2:pass2"
+      ],
       "nitro_unchecked": [],
       "mcfa_banned": [],
       "donut_unbanned": []
