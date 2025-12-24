@@ -1,22 +1,35 @@
 {
+  "status_text": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
+
   "roles": {
-    "vip": 123456789012345678,
-    "booster": 123456789012345678
+    "vip": 111111111111111111,
+    "booster": 222222222222222222
   },
+
+  "channels": {
+    "logs": 333333333333333333
+  },
+
+  "cooldowns": {
+    "free": 3600,
+    "vip": 1800,
+    "booster": 900
+  },
+
   "stock": {
     "free": [
-      "mcfa:email:pass",
-      "nitro_unchecked:email:pass",
-      "donut_unbanned:email:pass"
+      "mcfa|email|pass",
+      "nitro_unchecked|email|pass",
+      "donut_unbanned|email|pass"
     ],
     "vip": [
-      "steam:user:pass",
-      "xbox_random:user:pass",
-      "crunchyroll:user:pass"
+      "steam|email|pass",
+      "xbox_random|email|pass",
+      "crunchyroll|email|pass"
     ],
     "booster": [
-      "nitro:user:pass",
-      "gamekey:XXXXX-XXXXX"
+      "nitro|email|pass",
+      "gamekey|XXXXX-XXXXX"
     ]
   }
 }
