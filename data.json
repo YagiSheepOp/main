@@ -5,12 +5,14 @@
   },
   "stock": {
     "free": [
-      "mcfa:email@x.com:pass",
-      "nitro_unchecked:email@x.com:pass"
+      "mcfa:email:pass",
+      "nitro_unchecked:email:pass",
+      "donut_unbanned:email:pass"
     ],
     "vip": [
       "steam:user:pass",
-      "xbox:user:pass"
+      "xbox_random:user:pass",
+      "crunchyroll:user:pass"
     ],
     "booster": [
       "nitro:user:pass",
