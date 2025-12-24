@@ -1,35 +1,38 @@
 {
-  "status_text": ".gg/CNFyBV5VnG Best Gen & Best Server ✅",
+  "cooldown_seconds": 60,
 
   "roles": {
-    "vip": 111111111111111111,
-    "booster": 222222222222222222
-  },
-
-  "channels": {
-    "logs": 333333333333333333
-  },
-
-  "cooldowns": {
-    "free": 3600,
-    "vip": 1800,
-    "booster": 900
+    "vip": 123456789012345678,
+    "booster": 123456789012345678
   },
 
   "stock": {
-    "free": [
-      "mcfa|email|pass",
-      "nitro_unchecked|email|pass",
-      "donut_unbanned|email|pass"
-    ],
-    "vip": [
-      "steam|email|pass",
-      "xbox_random|email|pass",
-      "crunchyroll|email|pass"
-    ],
-    "booster": [
-      "nitro|email|pass",
-      "gamekey|XXXXX-XXXXX"
-    ]
+    "free": {
+      "mcfa": [],
+      "nitro_30": [],
+      "mcfa_hypixel_unbanned": [],
+      "steam_10_games": []
+    },
+
+    "vip": {
+      "vip_mcfa": [],
+      "nitro_50": [],
+      "mcfa_donut_unbanned": [],
+      "steam_50_games": [],
+      "gta5": [],
+      "crunchyroll": [],
+      "jio_cinema": [],
+      "netflix": []
+    },
+
+    "booster": {
+      "booster_mcfa": [],
+      "mcfa_pass_change": [],
+      "mcfa_name_change": [],
+      "redeem_code": [],
+      "steam_key": [],
+      "mcfa_key": [],
+      "game_key": []
+    }
   }
 }
